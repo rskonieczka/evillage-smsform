@@ -2,7 +2,7 @@
 /**
  * Plugin Name: EVILLAGE.PL - SMS Form (kupon rabatowy)
  * Description: Formularz pobrania kuponu rabatowego wysyłanego SMS-em przez SMSAPI. Po wysłaniu kuponu wysyła e-mail z numerem vouchera (autonumer). Blok „SMS Kupon” lub shortcode [evillage_smsform]
- * Version: 1.2.1
+ * Version: 1.3.0
  * Author: Rafał Skonieczka
  * Author URI: http://evillage.pl
  * Text Domain: evillage-smsform
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EVSMS_VERSION', '1.2.1' );
+define( 'EVSMS_VERSION', '1.3.0' );
 define( 'EVSMS_DB_VERSION', '2' );
 define( 'EVSMS_PLUGIN_FILE', __FILE__ );
 define( 'EVSMS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
@@ -45,6 +45,7 @@ function evsms_init() {
 	// Aktualizacja schematu po wgraniu nowej wersji bez ponownej aktywacji
 	if ( get_option( 'evsms_db_version' ) !== EVSMS_DB_VERSION ) {
 		EVSMS_Vouchers::install();
+		evsms_disable_settings_autoload();
 	}
 
 	EVSMS_Settings::init();
@@ -59,7 +60,17 @@ function evsms_activate() {
 	EVSMS_Vouchers::install();
 
 	if ( false === get_option( EVSMS_Settings::OPTION ) ) {
-		add_option( EVSMS_Settings::OPTION, EVSMS_Settings::defaults() );
+		// Bez autoload: ustawienia (z tokenem SMSAPI) nie są wczytywane przy każdym żądaniu
+		add_option( EVSMS_Settings::OPTION, EVSMS_Settings::defaults(), '', false );
+	}
+}
+
+/**
+ * Wyłącza autoload ustawień zapisanych przez starsze wersje (wp_set_option_autoload od WP 6.4).
+ */
+function evsms_disable_settings_autoload() {
+	if ( function_exists( 'wp_set_option_autoload' ) && false !== get_option( EVSMS_Settings::OPTION ) ) {
+		wp_set_option_autoload( EVSMS_Settings::OPTION, false );
 	}
 }
 register_activation_hook( __FILE__, 'evsms_activate' );

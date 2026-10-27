@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.2.1 |
+| Wersja | 1.3.0 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -127,6 +127,8 @@ Uwagi:
 - Puste pole tekstu zgody **wyłącza checkbox zgody** w formularzu.
 - Puste pole koloru = kolor z palety motywu. Wtyczka korzysta ze zmiennych CSS motywu Blocksy (`--theme-palette-color-*`), a w innych motywach używa własnych kolorów zapasowych. Zestaw „Kolory motywu” czyści wszystkie kolory.
 - Limit prób z IP = `0` wyłącza limit.
+- **Limit wszystkich SMS-ów** (na godzinę i na dobę, ze wszystkich adresów IP łącznie) chroni punkty SMSAPI przed atakiem z wielu adresów. Po przekroczeniu formularz pokazuje komunikat „Wyczerpany limit wysyłek”, a na adres powiadomień idzie jeden alert na okno limitu. `0` wyłącza limit.
+- „Nie ujawniaj, że numer otrzymał już kupon” – przy powtórzonym numerze klient widzi zwykły ekran sukcesu, a SMS nie jest wysyłany. Nikt nie sprawdzi więc przez formularz, czy dany numer brał udział w promocji.
 
 ### Ustawienia domyślne
 
@@ -141,6 +143,8 @@ Uwagi:
 | Jeden kupon na numer | włączone |
 | Zabronione numery | wszystkie grupy |
 | Limit prób z IP | 3 na godzinę |
+| Limit wszystkich SMS-ów | 30 na godzinę, 200 na dobę |
+| Nie ujawniaj powtórzonego numeru | włączone |
 
 ## Znaczniki w treściach
 
@@ -179,7 +183,7 @@ Numery komórkowe (45, 50, 51, 53, 57, 60, 66, 69, 72, 73, 78, 79, 88) nie nale�
 2. Żądanie `evsms_request` przechodzi kontrole: nonce → honeypot → normalizacja numeru do `48XXXXXXXXX` → zabronione początki → zgoda → limit prób z IP.
 3. `GET_LOCK` na numer telefonu (brak podwójnej wysyłki), opcjonalnie sprawdzenie „jeden kupon na numer”.
 4. Zapis wiersza `pending` – **numer vouchera = AUTO_INCREMENT** tabeli, formatowany jako prefiks + 6 cyfr.
-5. `POST https://api.smsapi.pl/sms.do` (`format=json`, `encoding=utf-8`, `skip_foreign=1`, opcjonalnie `normalize=1`, `from`, `test=1`). Przy błędzie transportu lub odpowiedzi 5xx – ponowienie na `https://api2.smsapi.pl/sms.do`.
+5. `POST https://api.smsapi.pl/sms.do` (`format=json`, `encoding=utf-8`, `skip_foreign=1`, opcjonalnie `normalize=1`, `from`, `test=1`, `idx` + `check_idx=1`). Przy błędzie transportu lub odpowiedzi 5xx – ponowienie na `https://api2.smsapi.pl/sms.do`; dzięki `idx` SMSAPI nie wyśle drugiej wiadomości, jeśli pierwsza już wyszła.
 6. Sukces → status `sent`, e-mail do administratora, akcja `evsms_voucher_sent`.
    Błąd → status `failed` z opisem błędu (numer zostaje w rejestrze, więc luka w numeracji jest audytowalna), klient widzi komunikat „SMS nie został wysłany”.
 
@@ -301,7 +305,7 @@ Wtyczka nie integruje się (jeszcze) z narzędziami eksportu / usuwania danych o
 | transienty `evsms_dv_*`, `evsms_nd_*` | liczniki prób z urządzenia i nowych urządzeń z IP (wygasają po godzinie) |
 | ciasteczko `evsms_device` (przeglądarka) | losowy identyfikator urządzenia + podpis HMAC, ważne 1 rok |
 
-Wyłączenie ani usunięcie wtyczki **nie usuwa tabeli voucherów ani ustawień** – rejestr ma wartość księgową. Aby usunąć dane całkowicie, po odinstalowaniu usuń tabelę i opcje ręcznie (np. w phpMyAdmin lub WP-CLI: `wp db query "DROP TABLE wp_evsms_vouchers"`, `wp option delete evsms_db_version`).
+Usunięcie wtyczki (`uninstall.php`) kasuje ustawienia (razem z tokenem SMSAPI), opcję `evsms_db_version` i transienty `evsms_*`. **Tabela voucherów zostaje** – rejestr ma wartość księgową. Aby usunąć ją także, zrób to ręcznie, np. `wp db query "DROP TABLE wp_evsms_vouchers"`. Ciasteczek `evsms_device` w przeglądarkach klientów nie da się usunąć po stronie serwera – wygasną same.
 
 ## Ograniczenia
 
@@ -356,6 +360,16 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.3.0
+
+- Limit wszystkich SMS-ów na godzinę i dobę z alertem e-mail.
+- Limit prób z IP odporny na równoległe żądania (blokada MySQL).
+- Opcja ukrywania, że numer otrzymał już kupon.
+- Ochrona przed podwójnym SMS-em przy ponowieniu na zapasowym endpoincie (`idx` + `check_idx` w SMSAPI).
+- Ustawienia (z tokenem SMSAPI) nie są już wczytywane automatycznie przy każdym żądaniu (autoload wyłączony).
+- `uninstall.php` usuwa ustawienia i dane tymczasowe (tabela voucherów zostaje).
+- Ochrona przed floodem z jednego urządzenia + zachęta „wyślij link” (obdarowanie).
 
 ### 1.2.1
 

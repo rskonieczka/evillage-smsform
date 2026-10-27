@@ -13,7 +13,7 @@ global $wpdb;
 delete_option( 'evsms_settings' );
 delete_option( 'evsms_db_version' );
 
-// Liczniki limitu z IP i flagi alertów
+// Liczniki limitów (IP: evsms_rl_*, urządzenia: evsms_dv_*, nowe urządzenia: evsms_nd_*) i flagi alertów
 $wpdb->query(
 	"DELETE FROM {$wpdb->options}
 	WHERE option_name LIKE '\_transient\_evsms\_%'
