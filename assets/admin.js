@@ -32,8 +32,8 @@
 		panels.forEach(function (panel) {
 			panel.hidden = panel.getAttribute('data-panel') !== id;
 		});
-		// Rejestr voucherów nie ma czego zapisywać
-		submitRow.hidden = id === 'vouchers';
+		// Rejestr voucherów i dokumentacja nie mają czego zapisywać
+		submitRow.hidden = id === 'vouchers' || id === 'docs';
 
 		try {
 			sessionStorage.setItem(STORAGE_KEY, id);
@@ -49,8 +49,34 @@
 		});
 	});
 
+	/**
+	 * Zakładka z adresu: #evsms-tab-<id> albo kotwica nagłówka z dokumentacji (np. #faq--…).
+	 */
+	function tabFromHash() {
+		var hash = location.hash;
+		if (hash.indexOf('#evsms-tab-') === 0) {
+			return hash.replace('#evsms-tab-', '');
+		}
+		if (hash.length > 1) {
+			var target = document.getElementById(decodeURIComponent(hash.slice(1)));
+			var panel = target && target.closest('[data-panel]');
+			if (panel) {
+				return panel.getAttribute('data-panel');
+			}
+		}
+		return '';
+	}
+
+	// Linki do zakładek na tej samej stronie (np. „Dokumentacja wtyczki” w pasku pomocy)
+	window.addEventListener('hashchange', function () {
+		var id = tabFromHash();
+		if (id) {
+			showTab(id);
+		}
+	});
+
 	wrap.classList.add('evsms-js');
-	var initial = location.hash.replace('#evsms-tab-', '');
+	var initial = tabFromHash();
 	if (!initial) {
 		try {
 			initial = sessionStorage.getItem(STORAGE_KEY) || '';

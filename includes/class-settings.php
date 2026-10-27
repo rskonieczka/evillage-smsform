@@ -21,6 +21,7 @@ class EVSMS_Settings {
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'test_mode_notice' ) );
 		add_filter( 'plugin_action_links_' . EVSMS_PLUGIN_BASENAME, array( __CLASS__, 'add_settings_link' ) );
+		add_filter( 'plugin_row_meta', array( __CLASS__, 'add_row_meta' ), 10, 2 );
 	}
 
 	/**
@@ -327,6 +328,46 @@ class EVSMS_Settings {
 	}
 
 	/**
+	 * Linki do dokumentacji: klucz => [etykieta, adres].
+	 */
+	public static function doc_links() {
+		return array(
+			'readme'  => array( 'Dokumentacja wtyczki', admin_url( 'options-general.php?page=' . self::PAGE . '#evsms-tab-docs' ) ),
+			'tokens'  => array( 'SMSAPI: tokeny API', 'https://ssl.smsapi.pl/react/oauth/manage' ),
+			'senders' => array( 'SMSAPI: pola nadawcy', 'https://ssl.smsapi.pl/sms_settings/sendernames' ),
+			'api'     => array( 'SMSAPI: dokumentacja API', 'https://www.smsapi.pl/docs' ),
+		);
+	}
+
+	/**
+	 * Link do dokumentacji: wewnętrzna (zakładka panelu) w tej samej karcie, zewnętrzne w nowej.
+	 */
+	public static function doc_link( $key, $label = '' ) {
+		$link = self::doc_links()[ $key ];
+
+		if ( 'readme' === $key ) {
+			return sprintf( '<a href="%s">%s</a>', esc_url( $link[1] ), esc_html( '' !== $label ? $label : $link[0] ) );
+		}
+
+		return sprintf(
+			'<a href="%s" target="_blank" rel="noopener noreferrer">%s<span class="screen-reader-text"> (otwiera się w nowej karcie)</span></a>',
+			esc_url( $link[1] ),
+			esc_html( '' !== $label ? $label : $link[0] )
+		);
+	}
+
+	/**
+	 * Link „Dokumentacja” w wierszu wtyczki na liście wtyczek.
+	 */
+	public static function add_row_meta( $meta, $file ) {
+		if ( EVSMS_PLUGIN_BASENAME === $file ) {
+			$meta[] = self::doc_link( 'readme', 'Dokumentacja' );
+			$meta[] = self::doc_link( 'api', 'Dokumentacja SMSAPI' );
+		}
+		return $meta;
+	}
+
+	/**
 	 * Zasoby panelu – tylko na stronie ustawień wtyczki.
 	 */
 	public static function enqueue_assets( $hook ) {
@@ -478,12 +519,25 @@ class EVSMS_Settings {
 			'look'     => 'Wygląd',
 			'notify'   => 'Powiadomienia',
 			'vouchers' => 'Vouchery',
+			'docs'     => 'Dokumentacja',
 		);
 		?>
 		<div class="wrap evsms-admin">
 			<h1>EVILLAGE SMS Kupon</h1>
 			<p>Formularz wstawisz blokiem <strong>„SMS Kupon”</strong> w edytorze albo shortcodem <code>[evillage_smsform]</code>
 				(atrybuty: <code>title</code>, <code>subtitle</code>, <code>button</code>, <code>color="#e11d48"</code>).</p>
+
+			<p class="evsms-help">
+				<span class="dashicons dashicons-editor-help" aria-hidden="true"></span>
+				<strong>Pomoc:</strong>
+				<?php
+				$links = array();
+				foreach ( array_keys( self::doc_links() ) as $key ) {
+					$links[] = self::doc_link( $key );
+				}
+				echo implode( ' <span aria-hidden="true">·</span> ', $links ); // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane w doc_link()
+				?>
+			</p>
 
 			<nav class="nav-tab-wrapper evsms-tabs" role="tablist">
 				<?php foreach ( $tabs as $id => $label ) : ?>
@@ -504,7 +558,7 @@ class EVSMS_Settings {
 								<?php else : ?>
 									<input type="password" id="evsms_token" name="<?php echo esc_attr( $name ); ?>[token]" value="" class="regular-text" autocomplete="new-password"
 										placeholder="<?php echo $s['token'] ? esc_attr( '•••••• zapisany (zostaw puste, by nie zmieniać)' ) : ''; ?>">
-									<p class="description">Panel SMSAPI → Ustawienia API → Tokeny API (uprawnienie SMS).</p>
+									<p class="description">Wygeneruj token z uprawnieniem SMS: <?php echo self::doc_link( 'tokens', 'panel SMSAPI → Tokeny API' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane w doc_link() ?>.</p>
 								<?php endif; ?>
 							</td>
 						</tr>
@@ -512,7 +566,11 @@ class EVSMS_Settings {
 							<th scope="row"><label for="evsms_sender">Pole nadawcy</label></th>
 							<td>
 								<input type="text" id="evsms_sender" name="<?php echo esc_attr( $name ); ?>[sender]" value="<?php echo esc_attr( $s['sender'] ); ?>" maxlength="11" class="regular-text">
-								<p class="description">Nazwa zarejestrowana w SMSAPI (max 11 znaków). Puste = domyślne pole nadawcy konta.</p>
+								<p class="description">
+									Tylko nazwa <strong>aktywna</strong> w SMSAPI (max 11 znaków, bez polskich liter) – inaczej SMSAPI odrzuci SMS błędem 14 „Invalid from field”.
+									Puste = domyślne pole nadawcy konta.<br>
+									Dodaj nazwę: <?php echo self::doc_link( 'senders', 'panel SMSAPI → Pola nadawcy' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane w doc_link() ?> – nowa nazwa wymaga aktywacji przez Biuro Obsługi Klienta SMSAPI.
+								</p>
 							</td>
 						</tr>
 						<tr>
@@ -520,6 +578,7 @@ class EVSMS_Settings {
 							<td>
 								<label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[test_mode]" value="1" <?php checked( $s['test_mode'], 1 ); ?>>
 									Nie wysyłaj realnie SMS-ów (<code>test=1</code> – SMSAPI waliduje żądanie, nie pobiera punktów)</label>
+								<p class="description">Parametry wysyłki i kody błędów: <?php echo self::doc_link( 'api' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane w doc_link() ?>.</p>
 							</td>
 						</tr>
 						<tr>
@@ -817,6 +876,17 @@ class EVSMS_Settings {
 
 			<section class="evsms-panel" id="evsms-tab-vouchers" data-panel="vouchers">
 				<?php self::render_vouchers_table(); ?>
+			</section>
+
+			<section class="evsms-panel evsms-docs" id="evsms-tab-docs" data-panel="docs">
+				<?php
+				$readme = EVSMS_PLUGIN_DIR . 'README.md';
+				if ( is_readable( $readme ) ) {
+					echo EVSMS_Markdown::render( (string) file_get_contents( $readme ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- treść escapowana w EVSMS_Markdown
+				} else {
+					echo '<p>Brak pliku README.md w katalogu wtyczki.</p>';
+				}
+				?>
 			</section>
 		</div>
 		<?php

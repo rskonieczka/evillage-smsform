@@ -120,6 +120,9 @@ Pominięty lub pusty atrybut = wartość z panelu ustawień. Na jednej stronie m
 | Wygląd | 15 zestawów kolorów, 8 kolorów do ręcznej zmiany, ikona nagłówka (10 wbudowanych, własny obrazek z biblioteki mediów albo brak), zaokrąglenie ramki oraz pól i przycisku (0–40 px), podgląd na żywo |
 | Powiadomienia | adresy e-mail, temat e-maila |
 | Vouchery | liczniki wysłanych/nieudanych i 50 ostatnich voucherów |
+| Dokumentacja | ten plik README wyświetlony w panelu (ze spisem treści) |
+
+Nad zakładkami jest pasek **Pomoc** z linkami: dokumentacja wtyczki, SMSAPI – tokeny API, pola nadawcy i dokumentacja API. Te same linki są przy polach token i pole nadawcy, a na liście wtyczek – link „Dokumentacja”.
 
 Uwagi:
 
@@ -352,7 +355,8 @@ evillage-smsform/
 │   ├── class-form.php          # shortcode, blok, AJAX, wydawanie voucherów, e-mail
 │   ├── class-smsapi.php        # klient SMSAPI.pl
 │   ├── class-vouchers.php      # tabela i rejestr voucherów
-│   └── class-device.php        # identyfikator urządzenia, limity floodu z urządzenia
+│   ├── class-device.php        # identyfikator urządzenia, limity floodu z urządzenia
+│   └── class-markdown.php      # README → HTML dla zakładki Dokumentacja
 └── assets/
     ├── smsform.js / .css       # formularz na stronie
     ├── block.js                # blok „SMS Kupon”
