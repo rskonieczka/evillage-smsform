@@ -1,0 +1,262 @@
+/* EVILLAGE SMS Form – panel ustawień */
+
+.evsms-admin .evsms-tabs {
+	margin-bottom: 8px;
+}
+
+/* Bez JS widać wszystkie sekcje; z JS – tylko aktywną zakładkę */
+.evsms-admin.evsms-js .evsms-panel[hidden],
+.evsms-admin [data-code-mode][hidden] {
+	display: none;
+}
+
+.evsms-admin .evsms-group-title {
+	margin: 1.6em 0 0;
+	padding-top: 1em;
+	border-top: 1px solid #dcdcde;
+	font-size: 1.1em;
+}
+
+.evsms-admin .evsms-group-title:first-of-type {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.evsms-admin .evsms-preset {
+	display: block;
+	margin: 0 0 8px;
+}
+
+/* Podgląd SMS */
+.evsms-sms-preview {
+	max-width: 420px;
+	margin-top: 12px;
+}
+
+.evsms-sms-bubble {
+	padding: 10px 14px;
+	border-radius: 18px 18px 18px 4px;
+	background: #e9e9eb;
+	color: #1d1d1f;
+	font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.evsms-sms-stats {
+	margin: 6px 0 0;
+	color: #50575e;
+	font-size: 12px;
+}
+
+.evsms-sms-stats.is-warning {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+/* Wygląd: ustawienia + podgląd obok siebie na szerokim ekranie */
+.evsms-look {
+	display: grid;
+	gap: 24px;
+}
+
+@media (min-width: 1280px) {
+	.evsms-look {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 600px);
+		align-items: start;
+	}
+
+	.evsms-look-preview {
+		position: sticky;
+		top: 48px;
+	}
+}
+
+.evsms-look-preview {
+	padding: 20px;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.evsms-look-preview .evsms {
+	margin: 0 0 12px;
+	font-size: 15px;
+}
+
+.evsms-look-label {
+	margin: 0 0 12px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+	color: #646970;
+}
+
+/* Statystyki i statusy voucherów */
+.evsms-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin: 16px 0;
+}
+
+.evsms-stat {
+	min-width: 120px;
+	margin: 0;
+	padding: 12px 16px;
+	border: 1px solid #dcdcde;
+	border-left-width: 4px;
+	border-radius: 4px;
+	background: #fff;
+}
+
+.evsms-stat strong {
+	display: block;
+	font-size: 22px;
+	line-height: 1.2;
+}
+
+.evsms-stat--sent { border-left-color: #00a32a; }
+.evsms-stat--failed { border-left-color: #d63638; }
+.evsms-stat--pending { border-left-color: #dba617; }
+
+.evsms-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.6;
+}
+
+.evsms-badge--sent { background: #edfaef; color: #00701d; }
+.evsms-badge--failed { background: #fcf0f1; color: #b32d2e; }
+.evsms-badge--pending { background: #fcf9e8; color: #7a5b00; }
+
+/* Gotowe zestawy kolorów */
+.evsms-schemes {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.evsms-admin .evsms-scheme {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.evsms-admin .evsms-scheme.is-active {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.evsms-scheme-swatch {
+	display: inline-grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border: 1px solid;
+	border-radius: 5px;
+}
+
+.evsms-scheme-swatch span {
+	width: 12px;
+	height: 12px;
+	border-radius: 3px;
+}
+
+/* Wybór ikony */
+.evsms-icons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.evsms-icon-choice {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	width: 64px;
+	cursor: pointer;
+}
+
+.evsms-icon-choice input {
+	position: absolute;
+	opacity: 0;
+}
+
+.evsms-icon-tile {
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	border: 1px solid #c3c4c7;
+	border-radius: 8px;
+	background: #fff;
+	color: #1d2327;
+}
+
+.evsms-icon-tile img {
+	max-width: 26px;
+	max-height: 26px;
+	object-fit: contain;
+}
+
+.evsms-icon-choice:hover .evsms-icon-tile {
+	border-color: #2271b1;
+}
+
+.evsms-icon-choice input:checked + .evsms-icon-tile {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 2px #2271b1;
+	color: #2271b1;
+}
+
+.evsms-icon-choice input:focus-visible + .evsms-icon-tile {
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
+}
+
+.evsms-icon-name {
+	font-size: 11px;
+	color: #50575e;
+	text-align: center;
+}
+
+.evsms-icon-custom {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.evsms-icon-custom[hidden] {
+	display: none;
+}
+
+.evsms-icon-custom .description {
+	flex-basis: 100%;
+	margin: 0;
+}
+
+/* Suwaki zaokrągleń */
+.evsms-range {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	max-width: 320px;
+}
+
+.evsms-range input[type="range"] {
+	flex: 1 1 auto;
+}
+
+.evsms-range output {
+	min-width: 48px;
+	font-variant-numeric: tabular-nums;
+}

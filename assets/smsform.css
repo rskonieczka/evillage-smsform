@@ -1,0 +1,338 @@
+/**
+ * EVILLAGE SMS Form. Kolory dziedziczone z palety Blocksy, z własnymi wartościami awaryjnymi.
+ * Akcent można nadpisać atrybutem shortcode/bloku "color" albo zmienną --evsms-accent.
+ */
+.evsms {
+	--evsms-accent: var(--theme-palette-color-1, #2563eb);
+	--evsms-on-accent: #fff;
+	--evsms-border: var(--theme-border-color, #d4d9e1);
+	--evsms-input-bg: var(--theme-palette-color-8, #fff);
+	--evsms-muted: color-mix(in srgb, currentColor 65%, transparent);
+	--evsms-error: #c62828;
+	--evsms-success: #1a7f37;
+	--evsms-radius: 12px;
+	--evsms-card-radius: 16px;
+
+	container-type: inline-size;
+	max-width: 560px;
+	margin: 2em 0;
+	padding: clamp(18px, 4vw, 28px);
+	border: 1px solid var(--evsms-border);
+	border-radius: var(--evsms-card-radius);
+	background: var(--evsms-bg, color-mix(in srgb, var(--evsms-accent) 4%, transparent));
+	color: var(--evsms-text, inherit);
+	box-sizing: border-box;
+}
+
+.evsms *,
+.evsms *::before,
+.evsms *::after {
+	box-sizing: border-box;
+}
+
+.evsms p {
+	margin: 0;
+}
+
+/* Nagłówek */
+.evsms-head {
+	display: flex;
+	gap: 14px;
+	align-items: flex-start;
+	margin-bottom: 20px;
+}
+
+.evsms-icon {
+	flex: 0 0 44px;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	color: var(--evsms-accent);
+	background: color-mix(in srgb, var(--evsms-accent) 12%, transparent);
+}
+
+.evsms-icon[hidden] {
+	display: none;
+}
+
+.evsms-icon img {
+	width: 26px;
+	height: 26px;
+	object-fit: contain;
+}
+
+.evsms-title {
+	font-size: 1.25em;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+.evsms-subtitle {
+	margin-top: 4px !important;
+	color: var(--evsms-muted);
+	line-height: 1.5;
+}
+
+/* Pole telefonu */
+.evsms-field + .evsms-field {
+	margin-top: 14px;
+}
+
+.evsms-label {
+	display: block;
+	margin-bottom: 6px;
+	font-size: .9em;
+	font-weight: 600;
+}
+
+.evsms-row {
+	display: flex;
+	gap: 10px;
+}
+
+.evsms-input {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	min-height: 50px;
+	border: 1px solid var(--evsms-border);
+	border-radius: var(--evsms-radius);
+	background: var(--evsms-input-bg);
+	transition: border-color .15s, box-shadow .15s;
+}
+
+.evsms-input:focus-within {
+	border-color: var(--evsms-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--evsms-accent) 25%, transparent);
+}
+
+.evsms-prefix {
+	padding: 0 4px 0 14px;
+	font-weight: 600;
+	color: var(--evsms-muted);
+	user-select: none;
+}
+
+/* Reset stylów motywu dla pola wewnątrz ramki */
+.evsms .evsms-input input.evsms-phone {
+	flex: 1 1 auto;
+	width: 100%;
+	min-width: 0;
+	height: auto;
+	margin: 0;
+	padding: 12px 14px 12px 6px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+	font-size: 16px; /* < 16px powoduje zoom na iOS */
+	font-variant-numeric: tabular-nums;
+	letter-spacing: .02em;
+	color: inherit;
+}
+
+.evsms .evsms-input input.evsms-phone::placeholder {
+	color: var(--evsms-muted);
+	opacity: .7;
+}
+
+/* Przycisk */
+.evsms .evsms-submit {
+	flex: 0 0 auto;
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	min-height: 50px;
+	margin: 0;
+	padding: 0 22px;
+	border: 0;
+	border-radius: var(--evsms-radius);
+	background: var(--evsms-accent);
+	color: var(--evsms-on-accent);
+	font: inherit;
+	font-weight: 700;
+	line-height: 1.2;
+	cursor: pointer;
+	transition: background-color .15s, transform .1s;
+}
+
+.evsms .evsms-submit:hover {
+	background: color-mix(in srgb, var(--evsms-accent) 85%, #000);
+}
+
+.evsms .evsms-submit:active {
+	transform: translateY(1px);
+}
+
+.evsms .evsms-submit:focus-visible {
+	outline: 3px solid color-mix(in srgb, var(--evsms-accent) 40%, transparent);
+	outline-offset: 2px;
+}
+
+.evsms .evsms-submit:disabled {
+	cursor: progress;
+}
+
+.evsms-spinner {
+	display: none;
+	width: 18px;
+	height: 18px;
+	border: 2.5px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+}
+
+.evsms-form.is-loading .evsms-spinner {
+	display: inline-block;
+	order: -1;
+	animation: evsms-spin .7s linear infinite;
+}
+
+@keyframes evsms-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Zgoda */
+.evsms-consent {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	font-size: .85em;
+	line-height: 1.5;
+	color: var(--evsms-muted);
+	cursor: pointer;
+}
+
+.evsms-consent input {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	margin: 2px 0 0;
+	accent-color: var(--evsms-accent);
+	cursor: pointer;
+}
+
+.evsms-consent a {
+	color: inherit;
+	text-decoration: underline;
+}
+
+/* Błędy */
+.evsms-error:empty,
+.evsms-msg:empty {
+	display: none;
+}
+
+.evsms-error,
+.evsms-msg {
+	margin-top: 6px !important;
+	font-size: .875em;
+	line-height: 1.4;
+	color: var(--evsms-error);
+}
+
+.evsms-msg {
+	margin-top: 14px !important;
+	padding: 10px 12px;
+	border-radius: min(var(--evsms-radius), 8px);
+	background: color-mix(in srgb, var(--evsms-error) 8%, transparent);
+}
+
+.evsms-field.is-invalid .evsms-input {
+	border-color: var(--evsms-error);
+}
+
+.evsms-field.is-invalid .evsms-input:focus-within {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--evsms-error) 20%, transparent);
+}
+
+/* Honeypot */
+.evsms-hp {
+	position: absolute !important;
+	left: -9999px !important;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+/* Sukces */
+.evsms-success {
+	text-align: center;
+	padding: 8px 0;
+	outline: none;
+	animation: evsms-in .3s ease-out;
+}
+
+.evsms-success-icon {
+	display: inline-grid;
+	place-items: center;
+	width: 56px;
+	height: 56px;
+	margin-bottom: 12px;
+	border-radius: 50%;
+	color: #fff;
+	background: var(--evsms-success);
+}
+
+.evsms-success-title {
+	font-size: 1.2em;
+	font-weight: 700;
+	line-height: 1.35;
+}
+
+.evsms-success-meta {
+	margin-top: 6px !important;
+	color: var(--evsms-muted);
+	line-height: 1.5;
+}
+
+@keyframes evsms-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+
+/* Wąski kontener (telefon, sidebar): przycisk pod polem na pełną szerokość */
+@container (max-width: 420px) {
+	/* Błąd zostaje tuż pod polem, przycisk pod nim – kolejność tabulacji bez zmian */
+	.evsms-field[data-field="phone"] {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.evsms-row {
+		display: contents;
+	}
+
+	.evsms-field[data-field="phone"] .evsms-error {
+		order: 1;
+	}
+
+	.evsms .evsms-submit {
+		order: 2;
+		width: 100% !important;
+		margin-top: 10px;
+	}
+
+	.evsms-icon {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.evsms-success {
+		animation: none;
+	}
+
+	.evsms-form.is-loading .evsms-spinner {
+		animation-duration: 1.6s;
+	}
+}
