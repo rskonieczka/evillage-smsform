@@ -43,7 +43,11 @@ class EVSMS_Form {
 			'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
 			'blockedPrefixes' => EVSMS_Settings::blocked_prefixes(),
 			'deviceDays'      => (int) EVSMS_Settings::get( 'device_coupons' ) > 0 ? (int) EVSMS_Settings::get( 'device_days' ) : 0,
-			'giftEnabled'     => (bool) EVSMS_Settings::get( 'gift_enabled' ),
+			'gift'            => array(
+				'enabled'   => (bool) EVSMS_Settings::get( 'gift_enabled' ),
+				'shareText' => EVSMS_Settings::msg( 'gift_share_text' ),
+				'copied'    => EVSMS_Settings::msg( 'gift_copied' ),
+			),
 			'messages'        => array(
 				'phoneEmpty'   => EVSMS_Settings::msg( 'err_phone_empty' ),
 				'phoneLength'  => EVSMS_Settings::msg( 'err_phone_length' ),
@@ -120,7 +124,7 @@ class EVSMS_Form {
 
 		ob_start();
 		?>
-		<div class="evsms"<?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?>>
+		<div class="evsms"<?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?><?php echo EVSMS_Settings::get( 'share_url' ) ? ' data-share-url="' . esc_url( EVSMS_Settings::get( 'share_url' ) ) . '"' : ''; ?>>
 			<<?php echo $tag; ?> class="evsms-form"<?php echo $preview ? '' : ' novalidate'; ?> aria-labelledby="<?php echo esc_attr( $uid ); ?>-title">
 				<div class="evsms-head">
 					<?php // W podglądzie span zostaje zawsze, żeby panel mógł podmieniać ikonę na żywo ?>
@@ -186,10 +190,13 @@ class EVSMS_Form {
 					<p class="evsms-claimed-title"><?php echo esc_html( EVSMS_Settings::msg( 'err_device_claimed' ) ); ?></p>
 				</div>
 
-				<?php // Sam komunikat – link klient wysyła znajomemu sam, wtyczka niczego nie wysyła ?>
-				<div class="evsms-gift" role="note" hidden>
-					<span class="evsms-gift-icon" aria-hidden="true"><?php echo EVSMS_Settings::icon_html( 'gift' ); // phpcs:ignore WordPress.Security.EscapeOutput -- statyczny SVG ?></span>
+				<div class="evsms-gift" hidden>
 					<p class="evsms-gift-text"><?php echo esc_html( EVSMS_Settings::msg( 'gift_text' ) ); ?></p>
+					<button type="button" class="evsms-gift-btn">
+						<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+						<?php echo esc_html( EVSMS_Settings::msg( 'gift_button' ) ); ?>
+					</button>
+					<p class="evsms-gift-status" role="status"></p>
 				</div>
 			<?php endif; ?>
 		</div>
