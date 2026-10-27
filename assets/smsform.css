@@ -336,3 +336,86 @@
 		animation-duration: 1.6s;
 	}
 }
+
+/* Urządzenie: kupon już odebrany */
+.evsms-claimed {
+	text-align: center;
+	padding: 8px 0;
+	outline: none;
+}
+
+.evsms-claimed-icon {
+	display: inline-grid;
+	place-items: center;
+	width: 56px;
+	height: 56px;
+	margin-bottom: 12px;
+	border-radius: 50%;
+	color: var(--evsms-accent);
+	background: color-mix(in srgb, var(--evsms-accent) 12%, transparent);
+}
+
+.evsms-claimed-title {
+	font-size: 1.15em;
+	font-weight: 700;
+	line-height: 1.35;
+}
+
+/* Obdarowanie: udostępnij link */
+.evsms-gift {
+	margin-top: 18px;
+	padding-top: 16px;
+	border-top: 1px dashed var(--evsms-border);
+	text-align: center;
+}
+
+.evsms-gift-text {
+	color: var(--evsms-muted);
+	line-height: 1.5;
+}
+
+.evsms .evsms-gift-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0 0;
+	padding: 10px 18px;
+	border: 1px solid var(--evsms-accent);
+	border-radius: var(--evsms-radius);
+	background: transparent;
+	color: var(--evsms-accent);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.evsms .evsms-gift-btn:hover {
+	background: color-mix(in srgb, var(--evsms-accent) 10%, transparent);
+}
+
+.evsms .evsms-gift-btn:focus-visible {
+	outline: 3px solid color-mix(in srgb, var(--evsms-accent) 40%, transparent);
+	outline-offset: 2px;
+}
+
+.evsms-gift-status {
+	margin-top: 8px !important;
+	font-size: .875em;
+	color: var(--evsms-muted);
+	word-break: break-all;
+}
+
+.evsms-gift-status:empty {
+	display: none;
+}
+
+/* Odliczanie po zbyt szybkiej próbie: komunikat neutralny, nie czerwony */
+.evsms-form.is-cooldown .evsms-msg {
+	color: inherit;
+	background: color-mix(in srgb, var(--evsms-accent) 8%, transparent);
+}
+
+.evsms-form.is-cooldown .evsms-submit {
+	opacity: .55;
+	cursor: not-allowed;
+}

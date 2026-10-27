@@ -35,6 +35,10 @@ class EVSMS_Settings {
 			'form_button_busy'  => array( 'Formularz', 'Przycisk podczas wysyłania', 'Wysyłanie…', '' ),
 			'success_message'   => array( 'Po wysłaniu', 'Nagłówek', 'Gotowe! Kupon został wysłany SMS-em.', '' ),
 			'success_meta'      => array( 'Po wysłaniu', 'Opis', 'Wysłaliśmy SMS na numer {phone}. Zwykle dociera w ciągu minuty.', '{phone} – zamaskowany numer, np. +48 600 *** 200' ),
+			'gift_text'         => array( 'Obdarowanie', 'Zachęta do udostępnienia', 'Chcesz obdarować kogoś kuponem? Wyślij mu link do tej strony – odbierze własny kod na swój numer.', 'Pokazywana po wysłaniu kuponu, gdy urządzenie już odebrało kupon oraz gdy numer już go otrzymał.' ),
+			'gift_button'       => array( 'Obdarowanie', 'Przycisk udostępniania', 'Wyślij link', '' ),
+			'gift_share_text'   => array( 'Obdarowanie', 'Tekst wiadomości z linkiem', 'Odbierz kupon rabatowy SMS-em:', 'Wstawiany przed linkiem przy udostępnianiu z telefonu (Messenger, WhatsApp, SMS…).' ),
+			'gift_copied'       => array( 'Obdarowanie', 'Po skopiowaniu linku', 'Link skopiowany – wklej go w wiadomości do znajomego.', 'Na komputerze link trafia do schowka.' ),
 			'err_phone_empty'   => array( 'Błędy', 'Brak numeru', 'Wpisz numer telefonu.', '' ),
 			'err_phone_length'  => array( 'Błędy', 'Niepoprawny numer', 'Numer powinien mieć 9 cyfr, np. 600 100 200.', '' ),
 			'err_phone_blocked' => array( 'Błędy', 'Zabroniony początek numeru', 'Numery zaczynające się od {prefix} nie są obsługiwane. Podaj numer komórkowy.', '{prefix} – dopasowany początek, np. 70' ),
@@ -42,6 +46,11 @@ class EVSMS_Settings {
 			'err_duplicate'     => array( 'Błędy', 'Numer już otrzymał kupon', 'Ten numer otrzymał już kupon – sprawdź wcześniejsze SMS-y.', '' ),
 			'err_sms_failed'    => array( 'Błędy', 'SMS nie został wysłany', 'Nie udało się wysłać SMS-a. Sprawdź numer i spróbuj ponownie.', '' ),
 			'err_rate_limit'    => array( 'Błędy', 'Za dużo prób', 'Zbyt wiele prób. Spróbuj ponownie za godzinę.', '' ),
+			'err_device_claimed' => array( 'Błędy', 'Urządzenie już odebrało kupon', 'Na tym urządzeniu kupon został już odebrany.', '' ),
+			'err_device_wait'   => array( 'Błędy', 'Zbyt szybka kolejna próba', 'Odczekaj {seconds} s przed kolejną próbą.', '{seconds} – sekundy do końca odliczania (aktualizowane na żywo)' ),
+			'err_device_limit'  => array( 'Błędy', 'Flood z urządzenia', 'Zbyt wiele prób z tego urządzenia. Spróbuj ponownie za godzinę.', '' ),
+			'err_cookies'       => array( 'Błędy', 'Wyłączone ciasteczka', 'Włącz obsługę plików cookie w przeglądarce, aby odebrać kupon.', '' ),
+			'err_quota'         => array( 'Błędy', 'Wyczerpany limit wysyłek', 'Pula kuponów na teraz się wyczerpała. Spróbuj ponownie później.', '' ),
 			'err_busy'          => array( 'Błędy', 'Wysyłka w toku', 'Trwa wysyłanie kuponu na ten numer. Spróbuj za chwilę.', '' ),
 			'err_session'       => array( 'Błędy', 'Wygasła sesja', 'Sesja formularza wygasła. Odśwież stronę i spróbuj ponownie.', '' ),
 			'err_generic'       => array( 'Błędy', 'Błąd ogólny', 'Wystąpił błąd. Spróbuj ponownie później.', '' ),
@@ -215,9 +224,19 @@ class EVSMS_Settings {
 			'notify_email'     => get_option( 'admin_email' ),
 			'email_subject'    => '[{site}] Pobrano voucher nr {voucher}',
 			'one_per_phone'    => 1,
+			'hide_duplicate'   => 1,
 			'blocked_presets'  => array_keys( self::prefix_presets() ),
 			'blocked_prefixes' => '',
 			'max_per_ip_hour'  => 3,
+			'max_per_hour'     => 30,
+			'max_per_day'      => 200,
+			'device_coupons'   => 1,
+			'device_days'      => 30,
+			'device_cooldown'  => 30,
+			'device_attempts'  => 5,
+			'device_new_per_ip' => 10,
+			'gift_enabled'     => 1,
+			'share_url'        => '',
 			'consent_text'     => 'Wyrażam zgodę na przetwarzanie mojego numeru telefonu w celu wysłania kuponu rabatowego.',
 			'radius'           => '12',
 			'radius_card'      => '16',
@@ -389,6 +408,7 @@ class EVSMS_Settings {
 		$out['voucher_prefix']   = sanitize_text_field( $input['voucher_prefix'] ?? '' );
 		$out['email_subject']    = sanitize_text_field( $input['email_subject'] ?? '' );
 		$out['one_per_phone']    = empty( $input['one_per_phone'] ) ? 0 : 1;
+		$out['hide_duplicate']   = empty( $input['hide_duplicate'] ) ? 0 : 1;
 		$out['blocked_presets']  = array_values( array_intersect( array_keys( self::prefix_presets() ), (array) ( $input['blocked_presets'] ?? array() ) ) );
 		$out['blocked_prefixes'] = implode( ', ', self::parse_prefixes( (string) ( $input['blocked_prefixes'] ?? '' ) ) );
 
@@ -408,6 +428,15 @@ class EVSMS_Settings {
 			$out['icon'] = $defaults['icon'];
 		}
 		$out['max_per_ip_hour']  = max( 0, absint( $input['max_per_ip_hour'] ?? 0 ) );
+		$out['max_per_hour']     = max( 0, absint( $input['max_per_hour'] ?? 0 ) );
+		$out['max_per_day']      = max( 0, absint( $input['max_per_day'] ?? 0 ) );
+
+		foreach ( array( 'device_coupons', 'device_days', 'device_cooldown', 'device_attempts', 'device_new_per_ip' ) as $key ) {
+			$out[ $key ] = absint( $input[ $key ] ?? 0 );
+		}
+		$out['device_cooldown'] = min( 3600, $out['device_cooldown'] );
+		$out['gift_enabled']    = empty( $input['gift_enabled'] ) ? 0 : 1;
+		$out['share_url']       = esc_url_raw( (string) ( $input['share_url'] ?? '' ) );
 		$out['consent_text']     = wp_kses_post( $input['consent_text'] ?? '' );
 
 		// Dopuszczamy kilka adresów rozdzielonych przecinkami
@@ -545,7 +574,8 @@ class EVSMS_Settings {
 						</tr>
 						<tr>
 							<th scope="row">Jeden kupon na numer</th>
-							<td><label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[one_per_phone]" value="1" <?php checked( $s['one_per_phone'], 1 ); ?>> Blokuj ponowne pobranie na ten sam numer telefonu</label></td>
+							<td><label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[one_per_phone]" value="1" <?php checked( $s['one_per_phone'], 1 ); ?>> Blokuj ponowne pobranie na ten sam numer telefonu</label>
+								<br><label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[hide_duplicate]" value="1" <?php checked( $s['hide_duplicate'], 1 ); ?>> Nie ujawniaj, że numer otrzymał już kupon (klient widzi ekran sukcesu, SMS nie jest wysyłany)</label></td>
 						</tr>
 						<tr>
 							<th scope="row">Zabronione numery</th>
@@ -573,6 +603,60 @@ class EVSMS_Settings {
 							<td>
 								<input type="number" min="0" id="evsms_max_ip" name="<?php echo esc_attr( $name ); ?>[max_per_ip_hour]" value="<?php echo esc_attr( $s['max_per_ip_hour'] ); ?>" class="small-text">
 								<p class="description">0 = bez limitu (niezalecane – każdy SMS kosztuje).</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">Limit wszystkich SMS-ów</th>
+							<td>
+								<label><input type="number" min="0" name="<?php echo esc_attr( $name ); ?>[max_per_hour]" value="<?php echo esc_attr( $s['max_per_hour'] ); ?>" class="small-text"> na godzinę</label>
+								&nbsp; <label><input type="number" min="0" name="<?php echo esc_attr( $name ); ?>[max_per_day]" value="<?php echo esc_attr( $s['max_per_day'] ); ?>" class="small-text"> na dobę</label>
+								<p class="description">Łącznie ze wszystkich adresów IP – chroni punkty SMSAPI przed atakiem z wielu adresów. Po przekroczeniu formularz odmawia, a na adres powiadomień idzie jeden alert. 0 = bez limitu.</p>
+							</td>
+						</tr>
+					</table>
+
+					<h2 class="evsms-group-title">Ochrona urządzenia (flood)</h2>
+					<p class="description">Każda przeglądarka dostaje podpisany identyfikator w ciasteczku – bez niego formularz nie zostanie przyjęty. 0 = wyłączone.</p>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row">Kupony na urządzenie</th>
+							<td>
+								<label>Maks. <input type="number" min="0" name="<?php echo esc_attr( $name ); ?>[device_coupons]" value="<?php echo esc_attr( $s['device_coupons'] ); ?>" class="small-text"> kupon(y)</label>
+								<label>w ciągu <input type="number" min="0" name="<?php echo esc_attr( $name ); ?>[device_days]" value="<?php echo esc_attr( $s['device_days'] ); ?>" class="small-text"> dni</label>
+								<p class="description">Po odebraniu kuponu formularz na tym urządzeniu zamienia się w komunikat z propozycją wysłania linku znajomym.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_device_cooldown">Odstęp między próbami</label></th>
+							<td>
+								<input type="number" min="0" max="3600" id="evsms_device_cooldown" name="<?php echo esc_attr( $name ); ?>[device_cooldown]" value="<?php echo esc_attr( $s['device_cooldown'] ); ?>" class="small-text"> s
+								<p class="description">Kolejna próba z tego samego urządzenia dopiero po tym czasie – klient widzi odliczanie.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_device_attempts">Próby z urządzenia / godz.</label></th>
+							<td><input type="number" min="0" id="evsms_device_attempts" name="<?php echo esc_attr( $name ); ?>[device_attempts]" value="<?php echo esc_attr( $s['device_attempts'] ); ?>" class="small-text"></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_device_new_per_ip">Nowe urządzenia z IP / godz.</label></th>
+							<td>
+								<input type="number" min="0" id="evsms_device_new_per_ip" name="<?php echo esc_attr( $name ); ?>[device_new_per_ip]" value="<?php echo esc_attr( $s['device_new_per_ip'] ); ?>" class="small-text">
+								<p class="description">Chroni przed obchodzeniem limitów przez kasowanie ciasteczek lub tryb incognito. Zbyt niska wartość może blokować wiele osób w jednej sieci (biuro, hotspot).</p>
+							</td>
+						</tr>
+					</table>
+
+					<h2 class="evsms-group-title">Obdarowanie</h2>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row">Zachęta „wyślij link”</th>
+							<td><label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[gift_enabled]" value="1" <?php checked( $s['gift_enabled'], 1 ); ?>> Pokazuj przycisk udostępnienia linku osobom, które już odebrały kupon</label></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_share_url">Link do udostępnienia</label></th>
+							<td>
+								<input type="url" id="evsms_share_url" name="<?php echo esc_attr( $name ); ?>[share_url]" value="<?php echo esc_attr( $s['share_url'] ); ?>" class="regular-text" placeholder="puste = strona, na której jest formularz">
+								<p class="description">Teksty zachęty i przycisku zmienisz w zakładce Komunikaty → Obdarowanie.</p>
 							</td>
 						</tr>
 					</table>
@@ -767,7 +851,7 @@ class EVSMS_Settings {
 		?>
 		<table class="widefat striped evsms-vouchers">
 			<thead>
-				<tr><th>Numer</th><th>Data</th><th>Telefon</th><th>Kod</th><th>Status</th><th>ID SMS / błąd</th></tr>
+				<tr><th>Numer</th><th>Data</th><th>Telefon</th><th>Kod</th><th>Status</th><th>Urządzenie</th><th>ID SMS / błąd</th></tr>
 			</thead>
 			<tbody>
 				<?php foreach ( $rows as $row ) : ?>
@@ -777,6 +861,7 @@ class EVSMS_Settings {
 						<td><a href="<?php echo esc_url( 'tel:+' . $row->phone ); ?>">+<?php echo esc_html( $row->phone ); ?></a></td>
 						<td><code><?php echo esc_html( $row->code ); ?></code></td>
 						<td><span class="evsms-badge evsms-badge--<?php echo esc_attr( $row->status ); ?>"><?php echo esc_html( $labels[ $row->status ] ?? $row->status ); ?></span></td>
+						<td><?php echo ! empty( $row->device_hash ) ? '<code title="Skrót identyfikatora urządzenia – te same znaki = ta sama przeglądarka">' . esc_html( substr( $row->device_hash, 0, 8 ) ) . '</code>' : '–'; ?></td>
 						<td><?php echo esc_html( EVSMS_Vouchers::STATUS_FAILED === $row->status ? (string) $row->error : $row->sms_id ); ?></td>
 					</tr>
 				<?php endforeach; ?>

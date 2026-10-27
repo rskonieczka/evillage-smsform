@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'EVSMS_VERSION', '1.2.1' );
-define( 'EVSMS_DB_VERSION', '1' );
+define( 'EVSMS_DB_VERSION', '2' );
 define( 'EVSMS_PLUGIN_FILE', __FILE__ );
 define( 'EVSMS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EVSMS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

@@ -42,11 +42,18 @@ class EVSMS_Form {
 		wp_localize_script( 'evsms-form', 'evsmsData', array(
 			'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
 			'blockedPrefixes' => EVSMS_Settings::blocked_prefixes(),
+			'deviceDays'      => (int) EVSMS_Settings::get( 'device_coupons' ) > 0 ? (int) EVSMS_Settings::get( 'device_days' ) : 0,
+			'gift'            => array(
+				'enabled'   => (bool) EVSMS_Settings::get( 'gift_enabled' ),
+				'shareText' => EVSMS_Settings::msg( 'gift_share_text' ),
+				'copied'    => EVSMS_Settings::msg( 'gift_copied' ),
+			),
 			'messages'        => array(
 				'phoneEmpty'   => EVSMS_Settings::msg( 'err_phone_empty' ),
 				'phoneLength'  => EVSMS_Settings::msg( 'err_phone_length' ),
 				'phoneBlocked' => EVSMS_Settings::msg( 'err_phone_blocked' ),
 				'consent'      => EVSMS_Settings::msg( 'err_consent' ),
+				'deviceWait'   => EVSMS_Settings::msg( 'err_device_wait' ),
 				'generic'      => EVSMS_Settings::msg( 'err_generic' ),
 			),
 		) );
@@ -117,7 +124,7 @@ class EVSMS_Form {
 
 		ob_start();
 		?>
-		<div class="evsms"<?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?>>
+		<div class="evsms"<?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?><?php echo EVSMS_Settings::get( 'share_url' ) ? ' data-share-url="' . esc_url( EVSMS_Settings::get( 'share_url' ) ) . '"' : ''; ?>>
 			<<?php echo $tag; ?> class="evsms-form"<?php echo $preview ? '' : ' novalidate'; ?> aria-labelledby="<?php echo esc_attr( $uid ); ?>-title">
 				<div class="evsms-head">
 					<?php // W podglądzie span zostaje zawsze, żeby panel mógł podmieniać ikonę na żywo ?>
@@ -176,6 +183,22 @@ class EVSMS_Form {
 				<p class="evsms-success-title"></p>
 				<p class="evsms-success-meta"></p>
 			</div>
+
+			<?php if ( ! $preview ) : ?>
+				<div class="evsms-claimed" tabindex="-1" hidden>
+					<span class="evsms-claimed-icon" aria-hidden="true"><?php echo EVSMS_Settings::icon_html( 'gift' ); // phpcs:ignore WordPress.Security.EscapeOutput -- statyczny SVG ?></span>
+					<p class="evsms-claimed-title"><?php echo esc_html( EVSMS_Settings::msg( 'err_device_claimed' ) ); ?></p>
+				</div>
+
+				<div class="evsms-gift" hidden>
+					<p class="evsms-gift-text"><?php echo esc_html( EVSMS_Settings::msg( 'gift_text' ) ); ?></p>
+					<button type="button" class="evsms-gift-btn">
+						<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+						<?php echo esc_html( EVSMS_Settings::msg( 'gift_button' ) ); ?>
+					</button>
+					<p class="evsms-gift-status" role="status"></p>
+				</div>
+			<?php endif; ?>
 		</div>
 		<?php
 		return ob_get_clean();
@@ -187,6 +210,13 @@ class EVSMS_Form {
 	 */
 	public static function ajax_nonce() {
 		nocache_headers();
+
+		// Przy okazji wydajemy identyfikator urządzenia (ciasteczko) – bez niego formularz nie zostanie przyjęty
+		if ( ! EVSMS_Device::ensure() ) {
+			// Za dużo nowych urządzeń z tej sieci (kasowanie ciasteczek / incognito)
+			self::fail( EVSMS_Settings::msg( 'err_rate_limit' ), 429, '', array( 'code' => 'ip_limit' ) );
+		}
+
 		wp_send_json_success( array( 'nonce' => wp_create_nonce( self::NONCE_ACTION ) ) );
 	}
 
@@ -203,64 +233,150 @@ class EVSMS_Form {
 			wp_send_json_success( array( 'message' => EVSMS_Settings::msg( 'success_message' ) ) );
 		}
 
-		$raw = (string) wp_unslash( $_POST['phone'] ?? '' );
-		if ( '' === trim( $raw ) ) {
-			self::fail( EVSMS_Settings::msg( 'err_phone_empty' ), 400, 'phone' );
+		$device = EVSMS_Device::current_hash();
+		if ( '' === $device ) {
+			self::fail( EVSMS_Settings::msg( 'err_cookies' ), 400, '', array( 'code' => 'cookies' ) );
 		}
 
-		$phone = self::normalize_phone( $raw );
-		if ( ! $phone ) {
-			self::fail( EVSMS_Settings::msg( 'err_phone_length' ), 400, 'phone' );
-		}
-
-		$blocked = self::blocked_prefix( $phone );
-		if ( null !== $blocked ) {
-			self::fail( EVSMS_Settings::msg( 'err_phone_blocked', array( '{prefix}' => $blocked ) ), 400, 'phone' );
-		}
-
-		if ( '' !== (string) EVSMS_Settings::get( 'consent_text' ) && empty( $_POST['consent'] ) ) {
-			self::fail( EVSMS_Settings::msg( 'err_consent' ), 400, 'consent' );
-		}
-
-		$ip_hash = hash_hmac( 'sha256', (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ), wp_salt( 'nonce' ) );
-		if ( ! self::check_rate_limit( $ip_hash ) ) {
-			self::fail( EVSMS_Settings::msg( 'err_rate_limit' ), 429 );
-		}
-
-		// Blokada per numer – chroni przed dwoma równoległymi żądaniami na ten sam numer
-		$lock = 'evsms_' . $phone;
+		// Jedno żądanie naraz z urządzenia – równoległe kliknięcia/skrypty nie ominą limitów
+		$lock = 'evsms_d_' . substr( $device, 0, 40 );
 		if ( ! self::acquire_lock( $lock ) ) {
 			self::fail( EVSMS_Settings::msg( 'err_busy' ), 409 );
 		}
 
 		try {
-			$result = self::issue_voucher( $phone, $ip_hash );
+			$result = self::process( $device );
+		} finally {
+			self::release_lock( $lock );
+		}
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result['data'] );
+		}
+		wp_send_json_error( $result['data'], $result['status'] );
+	}
+
+	/**
+	 * Walidacja, limity (urządzenie → IP → limit globalny w issue_voucher) i wysyłka.
+	 *
+	 * @return array{success:bool, data:array, status?:int}
+	 */
+	private static function process( $device ) {
+		$gift = (bool) EVSMS_Settings::get( 'gift_enabled' );
+
+		if ( EVSMS_Device::is_claimed( $device ) ) {
+			return self::error( EVSMS_Settings::msg( 'err_device_claimed' ), 403, '', array( 'code' => 'device_claimed', 'gift' => $gift ) );
+		}
+
+		$raw = (string) wp_unslash( $_POST['phone'] ?? '' );
+		if ( '' === trim( $raw ) ) {
+			return self::error( EVSMS_Settings::msg( 'err_phone_empty' ), 400, 'phone' );
+		}
+
+		$phone = self::normalize_phone( $raw );
+		if ( ! $phone ) {
+			return self::error( EVSMS_Settings::msg( 'err_phone_length' ), 400, 'phone' );
+		}
+
+		$blocked = self::blocked_prefix( $phone );
+		if ( null !== $blocked ) {
+			return self::error( EVSMS_Settings::msg( 'err_phone_blocked', array( '{prefix}' => $blocked ) ), 400, 'phone' );
+		}
+
+		if ( '' !== (string) EVSMS_Settings::get( 'consent_text' ) && empty( $_POST['consent'] ) ) {
+			return self::error( EVSMS_Settings::msg( 'err_consent' ), 400, 'consent' );
+		}
+
+		// Flood z urządzenia: odstęp między próbami i limit prób na godzinę (pod lockiem urządzenia)
+		$flood = EVSMS_Device::check_and_record( $device );
+		if ( $flood && 'cooldown' === $flood['code'] ) {
+			return self::error( EVSMS_Settings::msg( 'err_device_wait', array( '{seconds}' => $flood['retry_after'] ) ), 429, '', $flood );
+		}
+		if ( $flood ) {
+			return self::error( EVSMS_Settings::msg( 'err_device_limit' ), 429, '', $flood );
+		}
+
+		$ip_hash = EVSMS_Device::ip_hash();
+
+		// Blokada na IP – bez niej równoległe żądania odczytałyby ten sam stan licznika
+		$ip_lock = 'evsms_ip_' . substr( $ip_hash, 0, 32 );
+		if ( ! self::acquire_lock( $ip_lock ) ) {
+			return self::error( EVSMS_Settings::msg( 'err_busy' ), 409 );
+		}
+		$allowed = self::check_rate_limit( $ip_hash );
+		self::release_lock( $ip_lock );
+
+		if ( ! $allowed ) {
+			return self::error( EVSMS_Settings::msg( 'err_rate_limit' ), 429 );
+		}
+
+		// Blokada per numer – chroni przed równoległymi żądaniami na ten sam numer z różnych urządzeń
+		$lock = 'evsms_' . $phone;
+		if ( ! self::acquire_lock( $lock ) ) {
+			return self::error( EVSMS_Settings::msg( 'err_busy' ), 409 );
+		}
+
+		try {
+			$result = self::issue_voucher( $phone, $ip_hash, $device );
 		} finally {
 			self::release_lock( $lock );
 		}
 
 		if ( ! $result['success'] ) {
-			self::fail( $result['message'], 400, $result['field'] ?? '' );
+			$extra = ! empty( $result['duplicate'] ) ? array( 'gift' => $gift ) : array();
+			return self::error( $result['message'], $result['status'] ?? 400, $result['field'] ?? '', $extra );
 		}
 
-		wp_send_json_success( array(
-			'message' => EVSMS_Settings::msg( 'success_message' ),
-			'meta'    => EVSMS_Settings::msg( 'success_meta', array( '{phone}' => self::mask_phone( $phone ) ) ),
-		) );
+		return array(
+			'success' => true,
+			'data'    => array(
+				'message'     => EVSMS_Settings::msg( 'success_message' ),
+				'meta'        => EVSMS_Settings::msg( 'success_meta', array( '{phone}' => self::mask_phone( $phone ) ) ),
+				'gift'        => $gift,
+				'claimedDays' => (int) EVSMS_Settings::get( 'device_days' ),
+			),
+		);
+	}
+
+	/**
+	 * Wynik błędu dla process(); $extra trafia do JSON (np. code, retry_after, gift).
+	 */
+	private static function error( $message, $status, $field = '', $extra = array() ) {
+		return array(
+			'success' => false,
+			'status'  => $status,
+			'data'    => array_merge( array( 'message' => $message, 'field' => $field ), $extra ),
+		);
 	}
 
 	/**
 	 * Rezerwuje numer vouchera, wysyła SMS, a po sukcesie – e-mail.
 	 *
-	 * @return array{success:bool, message?:string, field?:string}
+	 * @return array{success:bool, message?:string, field?:string, status?:int, duplicate?:bool}
 	 */
-	private static function issue_voucher( $phone, $ip_hash ) {
+	private static function issue_voucher( $phone, $ip_hash, $device ) {
 		if ( EVSMS_Settings::get( 'one_per_phone' ) && EVSMS_Vouchers::phone_has_voucher( $phone ) ) {
-			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_duplicate' ), 'field' => 'phone' );
+			// Ten sam ekran co przy sukcesie – nie zdradzamy, kto już brał udział w promocji
+			if ( EVSMS_Settings::get( 'hide_duplicate' ) ) {
+				return array( 'success' => true );
+			}
+			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_duplicate' ), 'field' => 'phone', 'duplicate' => true );
 		}
 
-		$code = self::generate_code();
-		$id   = EVSMS_Vouchers::create( $phone, $code, $ip_hash );
+		// Limit globalny: sprawdzenie i rezerwacja numeru pod jedną blokadą, żeby równoległe żądania go nie przekroczyły
+		if ( ! self::acquire_lock( 'evsms_quota' ) ) {
+			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_busy' ), 'status' => 409 );
+		}
+
+		$quota = self::quota_exceeded();
+		$code  = self::generate_code();
+		$id    = $quota ? false : EVSMS_Vouchers::create( $phone, $code, $ip_hash, $device );
+		self::release_lock( 'evsms_quota' );
+
+		if ( $quota ) {
+			self::send_quota_alert( $quota );
+			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_quota' ), 'status' => 429 );
+		}
 		if ( ! $id ) {
 			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_generic' ) );
 		}
@@ -268,7 +384,7 @@ class EVSMS_Form {
 		$number  = EVSMS_Vouchers::format_number( $id );
 		$message = EVSMS_Settings::msg( 'message', self::placeholders( $number, $code ) );
 
-		$sms = EVSMS_Smsapi::send( $phone, $message );
+		$sms = EVSMS_Smsapi::send( $phone, $message, self::sms_idx( $id ) );
 		if ( ! $sms['success'] ) {
 			EVSMS_Vouchers::mark_failed( $id, $sms['error'] );
 			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_sms_failed' ), 'field' => 'phone' );
@@ -288,6 +404,55 @@ class EVSMS_Form {
 		do_action( 'evsms_voucher_sent', $id, $number, $phone, $code );
 
 		return array( 'success' => true );
+	}
+
+	/**
+	 * Przekroczony limit globalny: 'hour' / 'day' albo '' gdy można wysyłać.
+	 * Liczy wszystkie zarezerwowane numery (także nieudane – próba też mogła kosztować).
+	 */
+	private static function quota_exceeded() {
+		$limits = array(
+			'hour' => array( (int) EVSMS_Settings::get( 'max_per_hour' ), HOUR_IN_SECONDS ),
+			'day'  => array( (int) EVSMS_Settings::get( 'max_per_day' ), DAY_IN_SECONDS ),
+		);
+
+		foreach ( $limits as $window => $limit ) {
+			if ( $limit[0] > 0 && EVSMS_Vouchers::count_since( $limit[1] ) >= $limit[0] ) {
+				return $window;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Jeden alert e-mail na okno limitu (godzina / doba).
+	 */
+	private static function send_quota_alert( $window ) {
+		$to  = (string) EVSMS_Settings::get( 'notify_email' );
+		$key = 'evsms_quota_alert_' . $window;
+		if ( '' === $to || get_transient( $key ) ) {
+			return;
+		}
+		set_transient( $key, 1, 'day' === $window ? DAY_IN_SECONDS : HOUR_IN_SECONDS );
+
+		$site = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+		wp_mail(
+			$to,
+			sprintf( '[%s] SMS Kupon: osiągnięto limit wysyłek', $site ),
+			sprintf(
+				"Formularz SMS Kupon osiągnął limit %s i odrzuca kolejne zgłoszenia.\n\nJeśli to nie jest zwykły ruch, sprawdź rejestr voucherów:\n%s\n\nLimity zmienisz w zakładce Kupon i ochrona.",
+				'hour' === $window ? 'godzinowy' : 'dobowy',
+				admin_url( 'options-general.php?page=' . EVSMS_Settings::PAGE . '#evsms-tab-vouchers' )
+			)
+		);
+	}
+
+	/**
+	 * Identyfikator wysyłki dla SMSAPI (check_idx) – ponowienie na zapasowym endpoincie nie zdubluje SMS-a.
+	 */
+	private static function sms_idx( $id ) {
+		return 'evsms-' . substr( md5( home_url() ), 0, 8 ) . '-' . $id;
 	}
 
 	/**
@@ -445,7 +610,7 @@ class EVSMS_Form {
 	/**
 	 * Zwraca błąd JSON i kończy żądanie. $field wskazuje pole formularza, przy którym pokazać błąd.
 	 */
-	private static function fail( $message, $status = 400, $field = '' ) {
-		wp_send_json_error( array( 'message' => $message, 'field' => $field ), $status );
+	private static function fail( $message, $status = 400, $field = '', $extra = array() ) {
+		wp_send_json_error( array_merge( array( 'message' => $message, 'field' => $field ), $extra ), $status );
 	}
 }

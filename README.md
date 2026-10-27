@@ -169,6 +169,9 @@ Numery komórkowe (45, 50, 51, 53, 57, 60, 66, 69, 72, 73, 78, 79, 88) nie nale�
 3. Wysyłka: przycisk zmienia treść na „Wysyłanie…” ze spinnerem, zachowuje szerokość i blokuje podwójne kliknięcie.
 4. Sukces: formularz zamienia się w potwierdzenie z zamaskowanym numerem.
 5. Błędy pokazują się przy właściwym polu (telefon, zgoda) albo pod formularzem.
+6. Zbyt szybka kolejna próba z tego samego urządzenia: przycisk jest zablokowany, a pod formularzem trwa odliczanie („Odczekaj 25 s…”).
+7. Po odebraniu kuponu urządzenie od razu (także po odświeżeniu strony) widzi komunikat „kupon został już odebrany” zamiast formularza.
+8. **Obdarowanie**: po wysłaniu kuponu, przy „urządzenie już odebrało” i przy „numer już otrzymał kupon” pojawia się zachęta „Chcesz obdarować kogoś kuponem? Wyślij mu link” z przyciskiem – na telefonie otwiera systemowe udostępnianie (Messenger, WhatsApp, SMS…), na komputerze kopiuje link do schowka.
 
 ## Jak to działa po stronie serwera
 
@@ -186,6 +189,8 @@ Każdy wysłany SMS kosztuje, dlatego formularz ma kilka warstw ochrony:
 
 - **nonce** WordPressa dla każdego zgłoszenia,
 - **honeypot** – bot, który wypełni ukryte pole, dostaje fałszywy sukces, a SMS nie jest wysyłany,
+- **ochrona przed floodem z jednego urządzenia** – każda przeglądarka dostaje losowy identyfikator w podpisanym (HMAC) ciasteczku `evsms_device` (HttpOnly, SameSite=Lax); bez niego lub z podrobionym zgłoszenie jest odrzucane. Na nim działają: limit kuponów na urządzenie w okresie (domyślnie 1 na 30 dni), odstęp między próbami (30 s, z odliczaniem) i limit prób na godzinę (5). Jedno żądanie naraz z urządzenia (`GET_LOCK`),
+- **limit nowych urządzeń z jednego IP** (domyślnie 10/godz.) – kasowanie ciasteczek lub tryb incognito nie omija limitów w nieskończoność,
 - **limit prób z jednego IP** w oknie godzinowym (adres IP zapisywany jako HMAC-SHA256, nie jawnie),
 - **jeden kupon na numer** (liczą się tylko vouchery o statusie `sent`),
 - **blokada numerów** premium, infolinii, VoIP i stacjonarnych,
@@ -279,6 +284,8 @@ Wtyczka przetwarza dane osobowe (numer telefonu). Administrator strony odpowiada
 - umowę powierzenia przetwarzania danych z SMSAPI,
 - okres przechowywania danych w rejestrze voucherów.
 
+Ciasteczko `evsms_device` jest techniczne (ochrona przed nadużyciami, losowy identyfikator bez danych osobowych) – opisz je w polityce cookies. W bazie zapisywany jest tylko jego skrót HMAC.
+
 Co jest zapisywane w bazie: numer telefonu **jawnie** (potrzebny do blokady „jeden kupon na numer”), kod kuponu, status i identyfikator wysyłki SMSAPI, opis błędu, **skrót HMAC adresu IP** (bez możliwości odczytania adresu) i data. Numer telefonu trafia także do e-maila powiadomienia.
 
 Wtyczka nie integruje się (jeszcze) z narzędziami eksportu / usuwania danych osobowych WordPressa – żądania usunięcia danych trzeba obsłużyć ręcznie w tabeli `{prefix}evsms_vouchers`.
@@ -287,10 +294,12 @@ Wtyczka nie integruje się (jeszcze) z narzędziami eksportu / usuwania danych o
 
 | Miejsce | Zawartość |
 |---|---|
-| tabela `{prefix}evsms_vouchers` | rejestr voucherów (`id`, `phone`, `code`, `status`, `sms_id`, `error`, `ip_hash`, `created_at`) |
+| tabela `{prefix}evsms_vouchers` | rejestr voucherów (`id`, `phone`, `code`, `status`, `sms_id`, `error`, `ip_hash`, `device_hash`, `created_at`) |
 | opcja `evsms_db_version` | wersja schematu tabeli |
 | opcja z ustawieniami wtyczki | wszystkie ustawienia z panelu |
 | transienty `evsms_rl_*` | liczniki limitu prób z IP (wygasają po godzinie) |
+| transienty `evsms_dv_*`, `evsms_nd_*` | liczniki prób z urządzenia i nowych urządzeń z IP (wygasają po godzinie) |
+| ciasteczko `evsms_device` (przeglądarka) | losowy identyfikator urządzenia + podpis HMAC, ważne 1 rok |
 
 Wyłączenie ani usunięcie wtyczki **nie usuwa tabeli voucherów ani ustawień** – rejestr ma wartość księgową. Aby usunąć dane całkowicie, po odinstalowaniu usuń tabelę i opcje ręcznie (np. w phpMyAdmin lub WP-CLI: `wp db query "DROP TABLE wp_evsms_vouchers"`, `wp option delete evsms_db_version`).
 
@@ -317,6 +326,12 @@ Strona jest z cache, a żądanie `admin-ajax.php?action=evsms_nonce` jest blokow
 **Wszyscy dostają „Zbyt wiele prób”.**
 Serwer widzi adres proxy zamiast adresu klienta – zob. uwagę w sekcji [Bezpieczeństwo](#bezpieczeństwo-i-ochrona-przed-nadużyciami) albo zwiększ / wyłącz limit (0).
 
+**Klient widzi „Na tym urządzeniu kupon został już odebrany”.**
+To limit kuponów na urządzenie (zakładka **Kupon i ochrona → Ochrona urządzenia**). Do testów zmień limit dni na 0 albo usuń ciasteczko `evsms_device` i wpis `evsmsClaimedUntil` z localStorage przeglądarki.
+
+**„Włącz obsługę plików cookie”.**
+Przeglądarka blokuje ciasteczka albo `admin-ajax.php?action=evsms_nonce` jest cache'owane (wtedy nie ustawia ciasteczka) – wyklucz `admin-ajax.php` z cache.
+
 **Nie przychodzi e-mail o voucherze.**
 Sprawdź adres w zakładce **Powiadomienia** i konfigurację poczty (zalecana wtyczka SMTP). Nieudana wysyłka jest zapisywana w logu błędów PHP.
 
@@ -332,7 +347,8 @@ evillage-smsform/
 │   ├── class-settings.php      # panel ustawień, wartości domyślne, sanityzacja
 │   ├── class-form.php          # shortcode, blok, AJAX, wydawanie voucherów, e-mail
 │   ├── class-smsapi.php        # klient SMSAPI.pl
-│   └── class-vouchers.php      # tabela i rejestr voucherów
+│   ├── class-vouchers.php      # tabela i rejestr voucherów
+│   └── class-device.php        # identyfikator urządzenia, limity floodu z urządzenia
 └── assets/
     ├── smsform.js / .css       # formularz na stronie
     ├── block.js                # blok „SMS Kupon”

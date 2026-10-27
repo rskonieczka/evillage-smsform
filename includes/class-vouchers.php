@@ -40,9 +40,11 @@ class EVSMS_Vouchers {
 			sms_id varchar(64) NOT NULL DEFAULT '',
 			error text NULL,
 			ip_hash char(64) NOT NULL DEFAULT '',
+			device_hash char(64) NOT NULL DEFAULT '',
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY phone (phone),
+			KEY device_hash (device_hash),
 			KEY created_at (created_at)
 		) {$charset};" );
 
@@ -54,22 +56,38 @@ class EVSMS_Vouchers {
 	 *
 	 * @return int|false ID (autonumer) albo false.
 	 */
-	public static function create( $phone, $code, $ip_hash ) {
+	public static function create( $phone, $code, $ip_hash, $device_hash = '' ) {
 		global $wpdb;
 
 		$ok = $wpdb->insert(
 			self::table(),
 			array(
-				'phone'      => $phone,
-				'code'       => $code,
-				'status'     => self::STATUS_PENDING,
-				'ip_hash'    => $ip_hash,
-				'created_at' => current_time( 'mysql' ),
+				'phone'       => $phone,
+				'code'        => $code,
+				'status'      => self::STATUS_PENDING,
+				'ip_hash'     => $ip_hash,
+				'device_hash' => $device_hash,
+				'created_at'  => current_time( 'mysql' ),
 			),
-			array( '%s', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
 
 		return $ok ? (int) $wpdb->insert_id : false;
+	}
+
+	/**
+	 * Liczba wysłanych voucherów z danego urządzenia od $since (czas lokalny, jak created_at).
+	 */
+	public static function count_by_device( $device_hash, $since ) {
+		global $wpdb;
+		$table = self::table();
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$table} WHERE device_hash = %s AND status = %s AND created_at >= %s",
+			$device_hash,
+			self::STATUS_SENT,
+			$since
+		) );
 	}
 
 	/**
@@ -111,6 +129,19 @@ class EVSMS_Vouchers {
 			"SELECT id FROM {$table} WHERE phone = %s AND status = %s LIMIT 1",
 			$phone,
 			self::STATUS_SENT
+		) );
+	}
+
+	/**
+	 * Liczba zarezerwowanych numerów z ostatnich $seconds sekund (do limitu globalnego).
+	 */
+	public static function count_since( $seconds ) {
+		global $wpdb;
+		$table = self::table();
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$table} WHERE created_at >= %s",
+			wp_date( 'Y-m-d H:i:s', time() - (int) $seconds )
 		) );
 	}
 

@@ -136,8 +136,73 @@
 
 		form.classList.toggle('is-loading', loading);
 		form.setAttribute('aria-busy', loading ? 'true' : 'false');
-		button.disabled = loading;
+		// W trakcie odliczania (flood z urządzenia) przycisk zostaje zablokowany
+		button.disabled = loading || form.classList.contains('is-cooldown');
 	}
+
+	/* Urządzenie: zapamiętany odbiór kuponu --------------------------------- */
+
+	var CLAIM_KEY = 'evsmsClaimedUntil';
+
+	function markClaimed(days) {
+		if (!days) {
+			return;
+		}
+		try {
+			localStorage.setItem(CLAIM_KEY, String(Date.now() + days * 86400000));
+		} catch (e) {}
+	}
+
+	function isClaimed() {
+		try {
+			return Number(localStorage.getItem(CLAIM_KEY) || 0) > Date.now();
+		} catch (e) {
+			return false;
+		}
+	}
+
+	/* Obdarowanie: udostępnij link do strony z formularzem -------------------- */
+
+	function showGift(wrap) {
+		var box = wrap.querySelector('.evsms-gift');
+		if (box && evsmsData.gift && evsmsData.gift.enabled) {
+			box.hidden = false;
+		}
+	}
+
+	function shareUrl(wrap) {
+		return wrap.getAttribute('data-share-url') || (location.origin + location.pathname);
+	}
+
+	function setGiftStatus(wrap, text) {
+		wrap.querySelector('.evsms-gift-status').textContent = text;
+	}
+
+	document.addEventListener('click', function (e) {
+		var button = e.target.closest('.evsms-gift-btn');
+		if (!button) {
+			return;
+		}
+		var wrap = button.closest('.evsms');
+		var url = shareUrl(wrap);
+
+		// Telefon: systemowe okno udostępniania; komputer: kopiowanie do schowka
+		if (navigator.share) {
+			navigator.share({ title: document.title, text: evsmsData.gift.shareText, url: url }).catch(function () {});
+			return;
+		}
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(url).then(function () {
+				setGiftStatus(wrap, evsmsData.gift.copied);
+			}, function () {
+				setGiftStatus(wrap, url);
+			});
+			return;
+		}
+		setGiftStatus(wrap, url);
+	});
+
+	/* Stany końcowe ------------------------------------------------------------ */
 
 	function showSuccess(form, data) {
 		var wrap = form.closest('.evsms');
@@ -149,7 +214,56 @@
 		form.hidden = true;
 		box.hidden = false;
 		wrap.classList.add('is-done');
+		if (data.gift) {
+			showGift(wrap);
+		}
+		markClaimed(data.claimedDays);
 		box.focus();
+	}
+
+	function showClaimed(wrap, focus) {
+		var form = wrap.querySelector('.evsms-form');
+		var box = wrap.querySelector('.evsms-claimed');
+		if (!form || !box) {
+			return;
+		}
+		form.hidden = true;
+		box.hidden = false;
+		wrap.classList.add('is-done');
+		showGift(wrap);
+		if (focus) {
+			box.focus();
+		}
+	}
+
+	/**
+	 * Odliczanie po zbyt szybkiej kolejnej próbie z tego samego urządzenia.
+	 */
+	function startCooldown(form, seconds) {
+		var button = form.querySelector('.evsms-submit');
+		var left = Math.max(1, Math.ceil(seconds));
+
+		form.classList.add('is-cooldown');
+		button.disabled = true;
+
+		(function tick() {
+			if (left <= 0) {
+				form.classList.remove('is-cooldown');
+				button.disabled = false;
+				setMessage(form, '');
+				return;
+			}
+			setMessage(form, msg.deviceWait.split('{seconds}').join(left));
+			left--;
+			setTimeout(tick, 1000);
+		})();
+	}
+
+	// Kupon już odebrany na tym urządzeniu – od razu pokazujemy stan końcowy zamiast formularza
+	if (isClaimed()) {
+		document.querySelectorAll('.evsms').forEach(function (wrap) {
+			showClaimed(wrap, false);
+		});
 	}
 
 	// Maska: przy pisaniu przepuszczamy tylko cyfry (wklejanie czyści formatPhone)
@@ -213,25 +327,45 @@
 		setLoading(form, true);
 
 		// Najpierw świeży nonce (strona może pochodzić z cache), potem właściwe żądanie
+		// (przy okazji serwer wydaje ciasteczko urządzenia – bez niego wysyłka nie zostanie przyjęta)
 		post(new URLSearchParams({ action: 'evsms_nonce' }))
 			.then(function (res) {
+				if (!res || !res.success) {
+					return res; // np. zbyt wiele nowych urządzeń z tego IP
+				}
 				var data = new FormData(form);
 				data.set('phone', nationalDigits(data.get('phone')));
 				data.append('action', 'evsms_request');
-				data.append('nonce', res && res.data ? res.data.nonce : '');
+				data.append('nonce', res.data.nonce);
 				return post(data);
 			})
 			.then(function (res) {
 				var data = (res && res.data) || {};
+				var wrap = form.closest('.evsms');
+
 				if (res && res.success) {
 					showSuccess(form, data);
 					return;
 				}
+				if (data.code === 'device_claimed') {
+					markClaimed(evsmsData.deviceDays);
+					showClaimed(wrap, true);
+					return;
+				}
+				if (data.code === 'cooldown') {
+					startCooldown(form, data.retry_after);
+					return;
+				}
+
 				var text = data.message || msg.generic;
 				if (data.field && setFieldError(form, data.field, text)) {
 					fieldEl(form, data.field).querySelector('input').focus();
 				} else {
 					setMessage(form, text);
+				}
+				// Np. „ten numer otrzymał już kupon” – podpowiadamy, jak obdarować kogoś innego
+				if (data.gift) {
+					showGift(wrap);
 				}
 			})
 			.catch(function () {

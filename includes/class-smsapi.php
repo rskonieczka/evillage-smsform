@@ -17,9 +17,10 @@ class EVSMS_Smsapi {
 	 *
 	 * @param string $to      Numer w formacie 48XXXXXXXXX.
 	 * @param string $message Treść.
+	 * @param string $idx     Unikalny identyfikator wysyłki (SMSAPI odrzuci drugą wiadomość z tym samym idx).
 	 * @return array{success:bool, sms_id?:string, error?:string}
 	 */
-	public static function send( $to, $message ) {
+	public static function send( $to, $message, $idx = '' ) {
 		$token = EVSMS_Settings::token();
 		if ( '' === $token ) {
 			return array( 'success' => false, 'error' => 'Brak tokenu SMSAPI w konfiguracji.' );
@@ -32,6 +33,11 @@ class EVSMS_Smsapi {
 			'encoding'     => 'utf-8',
 			'skip_foreign' => 1,
 		);
+
+		if ( '' !== $idx ) {
+			$body['idx']       = $idx;
+			$body['check_idx'] = 1;
+		}
 
 		// ą → a itd.: SMS mieści 160 znaków zamiast 70
 		if ( EVSMS_Settings::get( 'normalize' ) ) {
