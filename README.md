@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.4.0 |
+| Wersja | 1.4.1 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -382,6 +382,11 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.4.1
+
+- Skrót „SMS Kupon” w górnym pasku administratora WordPressa dla użytkowników z uprawnieniem `manage_options`.
+- Doprecyzowanie, że status konwersji oznacza przekazanie zdarzenia do warstwy tagowania, a nie potwierdzenie odbioru przez Google Ads.
 
 ### 1.4.0
 
