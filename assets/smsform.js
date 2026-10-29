@@ -202,6 +202,83 @@
 		setGiftStatus(wrap, url);
 	});
 
+	/* Konwersje ---------------------------------------------------------------- */
+
+	var SOURCE_KEY = 'evsmsSource';
+
+	// gclid i UTM znikają z adresu po pierwszej podstronie – zapamiętujemy je na czas sesji
+	function readSource() {
+		var params = new URLSearchParams(window.location.search);
+		var found = {};
+		['gclid', 'utm_source', 'utm_medium', 'utm_campaign'].forEach(function (key) {
+			if (params.get(key)) {
+				found[key] = params.get(key);
+			}
+		});
+		try {
+			if (Object.keys(found).length) {
+				sessionStorage.setItem(SOURCE_KEY, JSON.stringify(found));
+				return found;
+			}
+			return JSON.parse(sessionStorage.getItem(SOURCE_KEY) || '{}') || {};
+		} catch (e) {
+			return found;
+		}
+	}
+
+	function addSource(data) {
+		var source = readSource();
+		data.set('src_page', window.location.pathname);
+		Object.keys(source).forEach(function (key) {
+			data.set('src_' + key, source[key]);
+		});
+	}
+
+	// Wywoływane wyłącznie po sukcesie z serwera, czyli po wysłaniu SMS-a z kuponem
+	function trackConversion(conv, form) {
+		var cfg = evsmsData.tracking || {};
+		if (!conv || !conv.transactionId) {
+			return;
+		}
+
+		window.dataLayer = window.dataLayer || [];
+		var layerEvent = { event: 'evsms_coupon_claimed', transaction_id: conv.transactionId };
+		if (cfg.value > 0) {
+			layerEvent.value = cfg.value;
+			layerEvent.currency = cfg.currency || 'PLN';
+		}
+		window.dataLayer.push(layerEvent);
+
+		// Układ z samym GTM (bez gtag): zdarzenie w dataLayer jest zgłoszeniem, które obsłuży kontener
+		var reported = !!window.google_tag_manager;
+		if (typeof window.gtag === 'function') {
+			if (cfg.enhanced) {
+				var digits = ((form.querySelector('.evsms-phone') || {}).value || '').replace(/\D+/g, '');
+				if (digits.length === 9) {
+					window.gtag('set', 'user_data', { phone_number: '+48' + digits });
+				}
+			}
+			if (cfg.sendTo) {
+				var payload = { send_to: cfg.sendTo, transaction_id: conv.transactionId };
+				if (cfg.value > 0) {
+					payload.value = cfg.value;
+					payload.currency = cfg.currency || 'PLN';
+				}
+				window.gtag('event', 'conversion', payload);
+				reported = true;
+			}
+			if (cfg.ga4Event) {
+				window.gtag('event', cfg.ga4Event, { method: 'sms_coupon', transaction_id: conv.transactionId });
+				reported = true;
+			}
+		}
+
+		// Zapis sygnału przekazania zdarzenia do warstwy tagowania (nie potwierdza odbioru przez Google)
+		if (reported) {
+			post(new URLSearchParams({ action: 'evsms_conv', id: conv.id, token: conv.token })).catch(function () {});
+		}
+	}
+
 	/* Stany końcowe ------------------------------------------------------------ */
 
 	function showSuccess(form, data) {
@@ -335,6 +412,7 @@
 				}
 				var data = new FormData(form);
 				data.set('phone', nationalDigits(data.get('phone')));
+				addSource(data);
 				data.append('action', 'evsms_request');
 				data.append('nonce', res.data.nonce);
 				return post(data);
@@ -345,6 +423,7 @@
 
 				if (res && res.success) {
 					showSuccess(form, data);
+					trackConversion(data.conversion, form);
 					return;
 				}
 				if (data.code === 'device_claimed') {

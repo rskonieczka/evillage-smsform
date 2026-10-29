@@ -419,3 +419,34 @@
 	opacity: .55;
 	cursor: not-allowed;
 }
+
+/* Blok Gutenberga: wyrównanie */
+.wp-block-evillage-smsform.aligncenter .evsms {
+	margin-inline: auto;
+}
+
+.wp-block-evillage-smsform.alignright .evsms {
+	margin-left: auto;
+}
+
+.wp-block-evillage-smsform.alignwide .evsms,
+.wp-block-evillage-smsform.alignfull .evsms {
+	max-width: none;
+}
+
+.wp-block-evillage-smsform.has-text-align-center .evsms {
+	text-align: center;
+}
+
+.wp-block-evillage-smsform.has-text-align-center .evsms-head {
+	flex-direction: column;
+	align-items: center;
+}
+
+.wp-block-evillage-smsform.has-text-align-right .evsms {
+	text-align: right;
+}
+
+.wp-block-evillage-smsform.has-text-align-right .evsms-head {
+	flex-direction: row-reverse;
+}

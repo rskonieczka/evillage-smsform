@@ -108,6 +108,21 @@ class EVSMS_Device {
 	}
 
 	/**
+	 * Zwraca ostatnią próbę (np. po awarii SMSAPI): bez cooldownu i bez zużycia limitu godzinowego.
+	 */
+	public static function refund( $device_hash ) {
+		$key   = 'evsms_dv_' . substr( $device_hash, 0, 32 );
+		$state = get_transient( $key );
+		if ( ! is_array( $state ) ) {
+			return;
+		}
+
+		$state['count'] = max( 0, (int) $state['count'] - 1 );
+		$state['last']  = 0;
+		set_transient( $key, $state, max( 1, HOUR_IN_SECONDS - ( time() - $state['start'] ) ) );
+	}
+
+	/**
 	 * Identyfikator z ciasteczka po weryfikacji podpisu.
 	 */
 	private static function current_id() {

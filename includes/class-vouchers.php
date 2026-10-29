@@ -41,6 +41,12 @@ class EVSMS_Vouchers {
 			error text NULL,
 			ip_hash char(64) NOT NULL DEFAULT '',
 			device_hash char(64) NOT NULL DEFAULT '',
+			page varchar(255) NOT NULL DEFAULT '',
+			gclid varchar(255) NOT NULL DEFAULT '',
+			utm_source varchar(100) NOT NULL DEFAULT '',
+			utm_medium varchar(100) NOT NULL DEFAULT '',
+			utm_campaign varchar(150) NOT NULL DEFAULT '',
+			conv_at datetime NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY phone (phone),
@@ -56,20 +62,27 @@ class EVSMS_Vouchers {
 	 *
 	 * @return int|false ID (autonumer) albo false.
 	 */
-	public static function create( $phone, $code, $ip_hash, $device_hash = '' ) {
+	public static function create( $phone, $code, $ip_hash, $device_hash = '', $source = array() ) {
 		global $wpdb;
+
+		$source = wp_parse_args( $source, array( 'page' => '', 'gclid' => '', 'utm_source' => '', 'utm_medium' => '', 'utm_campaign' => '' ) );
 
 		$ok = $wpdb->insert(
 			self::table(),
 			array(
-				'phone'       => $phone,
-				'code'        => $code,
-				'status'      => self::STATUS_PENDING,
-				'ip_hash'     => $ip_hash,
-				'device_hash' => $device_hash,
-				'created_at'  => current_time( 'mysql' ),
+				'phone'        => $phone,
+				'code'         => $code,
+				'status'       => self::STATUS_PENDING,
+				'ip_hash'      => $ip_hash,
+				'device_hash'  => $device_hash,
+				'page'         => $source['page'],
+				'gclid'        => $source['gclid'],
+				'utm_source'   => $source['utm_source'],
+				'utm_medium'   => $source['utm_medium'],
+				'utm_campaign' => $source['utm_campaign'],
+				'created_at'   => current_time( 'mysql' ),
 			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
 
 		return $ok ? (int) $wpdb->insert_id : false;
@@ -105,6 +118,63 @@ class EVSMS_Vouchers {
 	}
 
 	/**
+	 * Zapisuje, że przeglądarka przekazała sygnał konwersji do warstwy tagowania (tylko raz dla wysłanych voucherów).
+	 *
+	 * @return bool Czy zapis się udał.
+	 */
+	public static function mark_converted( $id ) {
+		global $wpdb;
+		$table = self::table();
+
+		return (bool) $wpdb->query( $wpdb->prepare(
+			"UPDATE {$table} SET conv_at = %s WHERE id = %d AND status = %s AND conv_at IS NULL",
+			current_time( 'mysql' ),
+			$id,
+			self::STATUS_SENT
+		) );
+	}
+
+	/**
+	 * Podpis dowodzący, że identyfikator vouchera dostała przeglądarka, której go wydano.
+	 */
+	public static function conv_token( $id ) {
+		return substr( hash_hmac( 'sha256', 'evsms-conv|' . (int) $id, wp_salt( 'auth' ) ), 0, 32 );
+	}
+
+	/**
+	 * Statystyki voucherów: wysłane, zarejestrowany sygnał tagowania i z gclid.
+	 */
+	public static function conversion_stats() {
+		global $wpdb;
+		$table = self::table();
+
+		$row = $wpdb->get_row( $wpdb->prepare(
+			"SELECT COUNT(*) AS sent, SUM(conv_at IS NOT NULL) AS confirmed, SUM(gclid <> '') AS with_gclid
+			FROM {$table} WHERE status = %s",
+			self::STATUS_SENT
+		), ARRAY_A );
+
+		return array(
+			'sent'       => (int) ( $row['sent'] ?? 0 ),
+			'confirmed'  => (int) ( $row['confirmed'] ?? 0 ),
+			'with_gclid' => (int) ( $row['with_gclid'] ?? 0 ),
+		);
+	}
+
+	/**
+	 * Wysłane vouchery do eksportu CSV (od najstarszego).
+	 */
+	public static function sent_for_export() {
+		global $wpdb;
+		$table = self::table();
+
+		return $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$table} WHERE status = %s ORDER BY id ASC",
+			self::STATUS_SENT
+		) );
+	}
+
+	/**
 	 * Oznacza voucher jako nieudany (numer zostaje w rejestrze dla audytu).
 	 */
 	public static function mark_failed( $id, $error ) {
@@ -133,15 +203,17 @@ class EVSMS_Vouchers {
 	}
 
 	/**
-	 * Liczba zarezerwowanych numerów z ostatnich $seconds sekund (do limitu globalnego).
+	 * Liczba numerów z ostatnich $seconds sekund (do limitu globalnego); nieudane wysyłki nie liczą się,
+	 * żeby awaria SMSAPI nie blokowała formularza ani nie wywoływała fałszywego alarmu o limicie.
 	 */
 	public static function count_since( $seconds ) {
 		global $wpdb;
 		$table = self::table();
 
 		return (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$table} WHERE created_at >= %s",
-			wp_date( 'Y-m-d H:i:s', time() - (int) $seconds )
+			"SELECT COUNT(*) FROM {$table} WHERE created_at >= %s AND status <> %s",
+			wp_date( 'Y-m-d H:i:s', time() - (int) $seconds ),
+			self::STATUS_FAILED
 		) );
 	}
 

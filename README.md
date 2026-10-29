@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.3.0 |
+| Wersja | 1.4.0 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -25,6 +25,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 - [Ścieżka klienta](#ścieżka-klienta)
 - [Jak to działa po stronie serwera](#jak-to-działa-po-stronie-serwera)
 - [Bezpieczeństwo i ochrona przed nadużyciami](#bezpieczeństwo-i-ochrona-przed-nadużyciami)
+- [Pomiar konwersji (Google Ads / GA4)](#pomiar-konwersji-google-ads--ga4)
 - [Dla programistów](#dla-programistów)
 - [Usługi zewnętrzne](#usługi-zewnętrzne)
 - [Prywatność i RODO](#prywatność-i-rodo)
@@ -110,7 +111,7 @@ Pominięty lub pusty atrybut = wartość z panelu ustawień. Na jednej stronie m
 
 ## Panel ustawień
 
-**Ustawienia → SMS Kupon** (wymaga uprawnienia `manage_options`). Z listy wtyczek prowadzi tam też link „Ustawienia”.
+**Ustawienia → SMS Kupon** (wymaga uprawnienia `manage_options`). Skrót „SMS Kupon” jest też dostępny w górnym pasku administratora WordPressa. Z listy wtyczek prowadzi tam również link „Ustawienia”.
 
 | Zakładka | Zawartość |
 |---|---|
@@ -119,7 +120,8 @@ Pominięty lub pusty atrybut = wartość z panelu ustawień. Na jednej stronie m
 | Komunikaty | wszystkie teksty dla klienta: tytuł, podtytuł, etykieta, treść przycisku (także w trakcie wysyłki), zgoda, ekran sukcesu, każdy komunikat błędu |
 | Wygląd | 15 zestawów kolorów, 8 kolorów do ręcznej zmiany, ikona nagłówka (10 wbudowanych, własny obrazek z biblioteki mediów albo brak), zaokrąglenie ramki oraz pól i przycisku (0–40 px), podgląd na żywo |
 | Powiadomienia | adresy e-mail, temat e-maila |
-| Vouchery | liczniki wysłanych/nieudanych i 50 ostatnich voucherów |
+| Konwersje | etykieta konwersji Google Ads, wartość, zdarzenie GA4, rozszerzone konwersje |
+| Vouchery | liczniki wysłanych/nieudanych, statystyki konwersji, eksport CSV i 50 ostatnich voucherów (ze źródłem i statusem konwersji) |
 | Dokumentacja | ten plik README wyświetlony w panelu (ze spisem treści) |
 
 Nad zakładkami jest pasek **Pomoc** z linkami: dokumentacja wtyczki, SMSAPI – tokeny API, pola nadawcy i dokumentacja API. Te same linki są przy polach token i pole nadawcy, a na liście wtyczek – link „Dokumentacja”.
@@ -209,6 +211,21 @@ Zalecenia: trzymaj token w `wp-config.php`, ustaw w SMSAPI limit dzienny / alert
 
 > Uwaga: za serwerem proxy / CDN (Cloudflare, load balancer) `REMOTE_ADDR` może być adresem proxy – wtedy limit z IP obejmuje wszystkich klientów naraz. Skonfiguruj serwer tak, żeby przekazywał prawdziwy adres klienta (np. `mod_remoteip`, `real_ip` w nginx).
 
+## Pomiar konwersji (Google Ads / GA4)
+
+Konwersja jest zgłaszana **dopiero po tym, jak SMSAPI przyjmie SMS z kuponem do wysłania** (odpowiedź z `id` wiadomości). To nie jest raport doręczenia do telefonu – wtyczka go nie odbiera. Nie liczy się samo kliknięcie przycisku, błędny numer, duplikat (przy opcji „nie ujawniaj”) ani tryb testowy.
+
+1. **Ustawienia → SMS Kupon → Konwersje**: wpisz `send_to` konwersji Google Ads (`AW-123456789/etykieta`), opcjonalnie wartość i walutę oraz nazwę zdarzenia GA4.
+2. Na stronie musi być tag `gtag.js` (np. z wtyczki Google Ads Multisite). Dla GTM do `dataLayer` trafia zawsze zdarzenie `evsms_coupon_claimed` z `transaction_id`.
+3. `transaction_id` = numer vouchera, więc Google nie policzy tej samej konwersji dwa razy.
+4. Rejestr zapisuje, że przeglądarka przekazała zdarzenie do warstwy tagowania (kolumna „Sygnał tagowania”). To nie jest potwierdzenie odebrania ani zarejestrowania konwersji przez Google Ads. Brak sygnału może wynikać m.in. z blokera lub braku zgody na cookies.
+5. Przy każdym voucherze zapisywane są: strona, `gclid`, `utm_source`, `utm_medium`, `utm_campaign` (z sesji, więc także po przejściu na podstronę).
+6. Zakładka **Vouchery → Pobierz CSV** daje plik z kolumnami `Google Click ID`, `Conversion Name`, `Conversion Time` (ze strefą z daty rekordu), `Conversion Value`, `Conversion Currency`, `Order ID` (tylko vouchery z `gclid`). W Google Ads potrzebna jest osobna konwersja typu „import z kliknięć”, a jej nazwę wpisz w ustawieniach (Nazwa konwersji do importu). Kolumn nie porównywałem z aktualnym szablonem Google – przed pierwszym importem sprawdź go w Google Ads.
+
+Uwaga: wtyczka Google Ads Multisite pomija od tej wersji formularz `.evsms-form` w ogólnej konwersji „form” (inaczej każde kliknięcie liczyłoby się jako konwersja).
+
+Opcja „Rozszerzone konwersje” przekazuje numer telefonu do Google (haszowany przez gtag) – włącz ją tylko, jeśli pozwala na to polityka prywatności i zgoda.
+
 ## Dla programistów
 
 ### Akcja `evsms_voucher_sent`
@@ -248,6 +265,7 @@ add_action( 'evsms_voucher_sent', function ( $id, $number, $phone, $code ) {
 | Akcja | Metoda | Opis |
 |---|---|---|
 | `evsms_nonce` | `admin-ajax.php` | zwraca świeży nonce (nagłówki `nocache`) |
+| `evsms_conv` | `admin-ajax.php`, POST | zapis sygnału przekazania zdarzenia do warstwy tagowania (`id`, `token` z odpowiedzi `evsms_request`) |
 | `evsms_request` | `admin-ajax.php`, POST | pola: `nonce`, `phone`, `consent`, `website` (honeypot); odpowiedź JSON `{ success, data: { message, meta \| field } }` |
 
 Kody HTTP błędów: `400` – walidacja, `403` – nonce, `409` – trwa wysyłka na ten numer, `429` – limit prób.
@@ -301,7 +319,7 @@ Wtyczka nie integruje się (jeszcze) z narzędziami eksportu / usuwania danych o
 
 | Miejsce | Zawartość |
 |---|---|
-| tabela `{prefix}evsms_vouchers` | rejestr voucherów (`id`, `phone`, `code`, `status`, `sms_id`, `error`, `ip_hash`, `device_hash`, `created_at`) |
+| tabela `{prefix}evsms_vouchers` | rejestr voucherów (`id`, `phone`, `code`, `status`, `sms_id`, `error`, `ip_hash`, `device_hash`, `page`, `gclid`, `utm_*`, `conv_at`, `created_at`) |
 | opcja `evsms_db_version` | wersja schematu tabeli |
 | opcja z ustawieniami wtyczki | wszystkie ustawienia z panelu |
 | transienty `evsms_rl_*` | liczniki limitu prób z IP (wygasają po godzinie) |
@@ -364,6 +382,12 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.4.0
+
+- Pomiar konwersji Google Ads / GA4 / dataLayer po potwierdzonym wysłaniu SMS-a, z `transaction_id` = numer vouchera.
+- Zapis źródła (strona, gclid, UTM) i sygnału przekazania zdarzenia do warstwy tagowania; statystyki i eksport CSV do importu offline.
+- Formularz nie wywołuje już fałszywej konwersji „form” z wtyczki Google Ads Multisite.
 
 ### 1.3.0
 

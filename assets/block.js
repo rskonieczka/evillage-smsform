@@ -26,8 +26,9 @@
 		icon: 'tickets-alt',
 		category: 'widgets',
 		keywords: ['sms', 'kupon', 'rabat', 'voucher'],
-		supports: { html: false },
+		supports: { html: false, align: ['left', 'center', 'right', 'wide', 'full'], spacing: { margin: true } },
 		attributes: {
+			textAlign: { type: 'string', default: '' },
 			title: { type: 'string', default: '' },
 			subtitle: { type: 'string', default: '' },
 			button: { type: 'string', default: '' },
@@ -38,6 +39,16 @@
 			return el(
 				'div',
 				blockEditor.useBlockProps(),
+				el(
+					blockEditor.BlockControls,
+					{ group: 'block' },
+					el(blockEditor.AlignmentControl, {
+						value: props.attributes.textAlign,
+						onChange: function (value) {
+							props.setAttributes({ textAlign: value || '' });
+						}
+					})
+				),
 				el(
 					blockEditor.InspectorControls,
 					null,

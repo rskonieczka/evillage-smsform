@@ -17,9 +17,11 @@ class EVSMS_Settings {
 	 */
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu_page' ) );
+		add_action( 'admin_bar_menu', array( __CLASS__, 'add_admin_bar_link' ), 100 );
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'test_mode_notice' ) );
+		add_action( 'admin_post_evsms_export', array( __CLASS__, 'export_csv' ) );
 		add_filter( 'plugin_action_links_' . EVSMS_PLUGIN_BASENAME, array( __CLASS__, 'add_settings_link' ) );
 		add_filter( 'plugin_row_meta', array( __CLASS__, 'add_row_meta' ), 10, 2 );
 	}
@@ -36,6 +38,7 @@ class EVSMS_Settings {
 			'form_button_busy'  => array( 'Formularz', 'Przycisk podczas wysyłania', 'Wysyłanie…', '' ),
 			'success_message'   => array( 'Po wysłaniu', 'Nagłówek', 'Gotowe! Kupon został wysłany SMS-em.', '' ),
 			'success_meta'      => array( 'Po wysłaniu', 'Opis', 'Wysłaliśmy SMS na numer {phone}. Zwykle dociera w ciągu minuty.', '{phone} – zamaskowany numer, np. +48 600 *** 200' ),
+			'success_meta_repeat' => array( 'Po wysłaniu', 'Opis przy ponownym numerze', 'Jeśli numer {phone} nie otrzymał jeszcze kuponu, wysłaliśmy SMS. Jeśli wcześniej go odebrałeś, sprawdź wcześniejsze wiadomości.', 'Pokazywany zamiast opisu, gdy numer już brał udział w promocji, a ukrywanie duplikatów jest włączone. {phone} – zamaskowany numer.' ),
 			'gift_text'         => array( 'Obdarowanie', 'Zachęta do udostępnienia', 'Chcesz obdarować kogoś kuponem? Wyślij mu link do tej strony – odbierze własny kod na swój numer.', 'Pokazywana po wysłaniu kuponu, gdy urządzenie już odebrało kupon oraz gdy numer już go otrzymał.' ),
 			'gift_button'       => array( 'Obdarowanie', 'Przycisk udostępniania', 'Wyślij link', '' ),
 			'gift_share_text'   => array( 'Obdarowanie', 'Tekst wiadomości z linkiem', 'Odbierz kupon rabatowy SMS-em:', 'Wstawiany przed linkiem przy udostępnianiu z telefonu (Messenger, WhatsApp, SMS…).' ),
@@ -223,7 +226,7 @@ class EVSMS_Settings {
 			'code_prefix'      => 'RABAT-',
 			'voucher_prefix'   => 'EV-',
 			'notify_email'     => get_option( 'admin_email' ),
-			'email_subject'    => '[{site}] Pobrano voucher nr {voucher}',
+			'email_subject'    => '[{site}] Pobrano voucher nr {voucher}, tel. {phone}, {date}',
 			'one_per_phone'    => 1,
 			'hide_duplicate'   => 1,
 			'blocked_presets'  => array_keys( self::prefix_presets() ),
@@ -238,6 +241,12 @@ class EVSMS_Settings {
 			'device_new_per_ip' => 10,
 			'gift_enabled'     => 1,
 			'share_url'        => '',
+			'conv_send_to'     => '',
+			'conv_name'        => 'SMS Kupon',
+			'conv_value'       => '',
+			'conv_currency'    => 'PLN',
+			'conv_ga4_event'   => 'generate_lead',
+			'conv_enhanced'    => 0,
 			'consent_text'     => 'Wyrażam zgodę na przetwarzanie mojego numeru telefonu w celu wysłania kuponu rabatowego.',
 			'radius'           => '12',
 			'radius_card'      => '16',
@@ -317,6 +326,21 @@ class EVSMS_Settings {
 			self::PAGE,
 			array( __CLASS__, 'render_settings_page' )
 		);
+	}
+
+	/**
+	 * Dodaje skrót do ustawień wtyczki w górnym pasku administratora.
+	 */
+	public static function add_admin_bar_link( $admin_bar ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$admin_bar->add_node( array(
+			'id'    => 'evsms-settings',
+			'title' => 'SMS Kupon',
+			'href'  => admin_url( 'options-general.php?page=' . self::PAGE ),
+		) );
 	}
 
 	/**
@@ -478,6 +502,17 @@ class EVSMS_Settings {
 		$out['device_cooldown'] = min( 3600, $out['device_cooldown'] );
 		$out['gift_enabled']    = empty( $input['gift_enabled'] ) ? 0 : 1;
 		$out['share_url']       = esc_url_raw( (string) ( $input['share_url'] ?? '' ) );
+		$send_to                = trim( sanitize_text_field( $input['conv_send_to'] ?? '' ) );
+		$out['conv_send_to']    = preg_match( '/^AW-\d+\/[A-Za-z0-9_\-]+$/', $send_to ) ? $send_to : '';
+		if ( '' !== $send_to && '' === $out['conv_send_to'] ) {
+			add_settings_error( self::OPTION, 'evsms_conv_send_to', 'Etykieta konwersji ma niepoprawny format – wpisz np. AW-123456789/AbC-D_efG-h12345.' );
+		}
+		$out['conv_name']       = sanitize_text_field( $input['conv_name'] ?? '' ) ?: 'SMS Kupon';
+		$value                  = str_replace( ',', '.', trim( (string) ( $input['conv_value'] ?? '' ) ) );
+		$out['conv_value']      = is_numeric( $value ) && $value > 0 ? (string) (float) $value : '';
+		$out['conv_currency']   = strtoupper( substr( preg_replace( '/[^A-Za-z]/', '', (string) ( $input['conv_currency'] ?? '' ) ), 0, 3 ) ) ?: 'PLN';
+		$out['conv_ga4_event']  = substr( preg_replace( '/[^A-Za-z0-9_]/', '', (string) ( $input['conv_ga4_event'] ?? '' ) ), 0, 40 );
+		$out['conv_enhanced']   = empty( $input['conv_enhanced'] ) ? 0 : 1;
 		$out['consent_text']     = wp_kses_post( $input['consent_text'] ?? '' );
 
 		// Dopuszczamy kilka adresów rozdzielonych przecinkami
@@ -518,6 +553,7 @@ class EVSMS_Settings {
 			'messages' => 'Komunikaty',
 			'look'     => 'Wygląd',
 			'notify'   => 'Powiadomienia',
+			'tracking' => 'Konwersje',
 			'vouchers' => 'Vouchery',
 			'docs'     => 'Dokumentacja',
 		);
@@ -852,6 +888,48 @@ class EVSMS_Settings {
 					</div>
 				</section>
 
+				<section class="evsms-panel" id="evsms-tab-tracking" data-panel="tracking">
+					<p>Konwersja jest zgłaszana <strong>dopiero po tym, jak serwer potwierdzi wysłanie SMS-a z kuponem</strong> (nie przy samym kliknięciu przycisku, błędnym numerze, duplikacie ani w trybie testowym). Każda ma identyfikator transakcji = numer vouchera, więc Google nie policzy jej podwójnie.</p>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="evsms_conv_send_to">Konwersja Google Ads</label></th>
+							<td>
+								<input type="text" id="evsms_conv_send_to" name="<?php echo esc_attr( $name ); ?>[conv_send_to]" value="<?php echo esc_attr( $s['conv_send_to'] ); ?>" class="regular-text" placeholder="AW-123456789/AbC-D_efG-h12345">
+								<p class="description">Identyfikator i etykieta z Google Ads (Cele → Konwersje → fragment tagu: <code>send_to</code>). Puste = bez zdarzenia Google Ads (zostaje tylko <code>dataLayer</code> i GA4). Tag <code>gtag.js</code> musi być już na stronie (np. z wtyczki Google Ads).</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_conv_name">Nazwa konwersji do importu</label></th>
+							<td>
+								<input type="text" id="evsms_conv_name" name="<?php echo esc_attr( $name ); ?>[conv_name]" value="<?php echo esc_attr( $s['conv_name'] ); ?>" class="regular-text">
+								<p class="description">Dokładna nazwa konwersji typu „import z kliknięć” w Google Ads – trafia do kolumny <code>Conversion Name</code> w pliku CSV. To <strong>osobna</strong> konwersja niż ta z <code>send_to</code> (witryna).</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_conv_value">Wartość konwersji</label></th>
+							<td>
+								<input type="text" id="evsms_conv_value" name="<?php echo esc_attr( $name ); ?>[conv_value]" value="<?php echo esc_attr( $s['conv_value'] ); ?>" class="small-text" inputmode="decimal">
+								<input type="text" name="<?php echo esc_attr( $name ); ?>[conv_currency]" value="<?php echo esc_attr( $s['conv_currency'] ); ?>" class="small-text" maxlength="3" aria-label="Waluta">
+								<p class="description">Opcjonalna wartość jednego pobranego kuponu i waluta (np. 10 PLN). Puste = bez wartości.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="evsms_conv_ga4_event">Zdarzenie GA4</label></th>
+							<td>
+								<input type="text" id="evsms_conv_ga4_event" name="<?php echo esc_attr( $name ); ?>[conv_ga4_event]" value="<?php echo esc_attr( $s['conv_ga4_event'] ); ?>" class="regular-text">
+								<p class="description">Nazwa zdarzenia wysyłanego do GA4 (domyślnie <code>generate_lead</code>). Puste = bez zdarzenia GA4. Niezależnie od tego do <code>dataLayer</code> trafia zawsze zdarzenie <code>evsms_coupon_claimed</code> (dla Google Tag Managera).</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">Rozszerzone konwersje</th>
+							<td>
+								<label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[conv_enhanced]" value="1" <?php checked( $s['conv_enhanced'], 1 ); ?>> Przekazuj numer telefonu do Google (haszowany przez gtag) – poprawia dopasowanie konwersji</label>
+								<p class="description">Wymaga włączonych „rozszerzonych konwersji” w koncie Google Ads i podstawy prawnej/zgody w polityce prywatności.</p>
+							</td>
+						</tr>
+					</table>
+				</section>
+
 				<section class="evsms-panel" id="evsms-tab-notify" data-panel="notify">
 					<table class="form-table" role="presentation">
 						<tr>
@@ -865,7 +943,7 @@ class EVSMS_Settings {
 							<th scope="row"><label for="evsms_email_subject">Temat e-maila</label></th>
 							<td>
 								<input type="text" id="evsms_email_subject" name="<?php echo esc_attr( $name ); ?>[email_subject]" value="<?php echo esc_attr( $s['email_subject'] ); ?>" class="large-text">
-								<p class="description">Znaczniki: <code>{voucher}</code>, <code>{code}</code>, <code>{site}</code>.</p>
+								<p class="description">Znaczniki: <code>{voucher}</code>, <code>{code}</code>, <code>{site}</code>, <code>{phone}</code> numer telefonu, <code>{date}</code> data i godzina (np. 27.10.2026 14:24:07).</p>
 							</td>
 						</tr>
 					</table>
@@ -893,6 +971,38 @@ class EVSMS_Settings {
 	}
 
 	/**
+	 * Eksport CSV wysłanych voucherów w formacie importu konwersji offline Google Ads.
+	 */
+	public static function export_csv() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Brak uprawnień.', 403 );
+		}
+		check_admin_referer( 'evsms_export' );
+
+		$currency = (string) self::get( 'conv_currency' );
+		$value    = (string) self::get( 'conv_value' );
+		$name     = (string) self::get( 'conv_name' );
+		$tz       = wp_timezone();
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="evsms-konwersje-' . gmdate( 'Y-m-d' ) . '.csv"' );
+
+		$out = fopen( 'php://output', 'w' );
+		fputcsv( $out, array( 'Google Click ID', 'Conversion Name', 'Conversion Time', 'Conversion Value', 'Conversion Currency', 'Order ID' ) );
+		foreach ( EVSMS_Vouchers::sent_for_export() as $row ) {
+			if ( '' === $row->gclid ) {
+				continue; // import offline wymaga gclid
+			}
+			// Strefa z daty samego rekordu (czas letni/zimowy), format: 2026-10-29 13:35:00+01:00
+			$time = ( new DateTime( $row->created_at, $tz ) )->format( 'Y-m-d H:i:sP' );
+			fputcsv( $out, array( $row->gclid, $name, $time, $value, $value ? $currency : '', EVSMS_Vouchers::format_number( $row->id ) ) );
+		}
+		fclose( $out );
+		exit;
+	}
+
+	/**
 	 * Podsumowanie i tabela ostatnich voucherów.
 	 */
 	private static function render_vouchers_table() {
@@ -913,6 +1023,19 @@ class EVSMS_Settings {
 		</ul>
 
 		<?php
+		$conv = EVSMS_Vouchers::conversion_stats();
+		$rate = $conv['sent'] > 0 ? round( 100 * $conv['confirmed'] / $conv['sent'] ) : 0;
+		?>
+		<h3>Konwersje</h3>
+		<ul class="evsms-stats">
+			<li class="evsms-stat"><strong><?php echo esc_html( number_format_i18n( $conv['sent'] ) ); ?></strong><span>Kupony wysłane (SMS przyjęty przez SMSAPI)</span></li>
+			<li class="evsms-stat"><strong><?php echo esc_html( number_format_i18n( $conv['confirmed'] ) ); ?></strong><span>Przekazano do warstwy tagowania (<?php echo esc_html( $rate ); ?>%)</span></li>
+			<li class="evsms-stat"><strong><?php echo esc_html( number_format_i18n( $conv['with_gclid'] ) ); ?></strong><span>Z kliknięcia w reklamę (gclid)</span></li>
+		</ul>
+		<p class="description">Licznik oznacza, że przeglądarka przekazała zdarzenie do gtag/GTM/GA4; nie potwierdza odebrania ani zarejestrowania konwersji przez Google Ads. Brak sygnału może wynikać m.in. z blokera lub braku zgody na cookies. „Wysłane” oznacza, że SMSAPI przyjęło wiadomość do wysyłki (to nie jest raport doręczenia do telefonu). gclid pozwala zaimportować brakujące konwersje do Google Ads.
+			<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=evsms_export' ), 'evsms_export' ) ); ?>">Pobierz CSV (konwersje offline)</a></p>
+
+		<?php
 		$rows = EVSMS_Vouchers::latest( 50 );
 		if ( ! $rows ) {
 			echo '<p>Brak voucherów – pojawią się tu po pierwszym wysłaniu formularza.</p>';
@@ -921,7 +1044,7 @@ class EVSMS_Settings {
 		?>
 		<table class="widefat striped evsms-vouchers">
 			<thead>
-				<tr><th>Numer</th><th>Data</th><th>Telefon</th><th>Kod</th><th>Status</th><th>Urządzenie</th><th>ID SMS / błąd</th></tr>
+				<tr><th>Numer</th><th>Data</th><th>Telefon</th><th>Kod</th><th>Status</th><th>Źródło</th><th>Sygnał tagowania</th><th>Urządzenie</th><th>ID SMS / błąd</th></tr>
 			</thead>
 			<tbody>
 				<?php foreach ( $rows as $row ) : ?>
@@ -931,6 +1054,12 @@ class EVSMS_Settings {
 						<td><a href="<?php echo esc_url( 'tel:+' . $row->phone ); ?>">+<?php echo esc_html( $row->phone ); ?></a></td>
 						<td><code><?php echo esc_html( $row->code ); ?></code></td>
 						<td><span class="evsms-badge evsms-badge--<?php echo esc_attr( $row->status ); ?>"><?php echo esc_html( $labels[ $row->status ] ?? $row->status ); ?></span></td>
+						<td><?php
+							$src = array_filter( array( $row->utm_source, $row->utm_medium, $row->utm_campaign ) );
+							echo esc_html( $src ? implode( ' / ', $src ) : ( '' !== $row->gclid ? 'Google Ads' : '–' ) );
+							echo '' !== $row->page ? '<br><small>' . esc_html( $row->page ) . '</small>' : ''; // phpcs:ignore WordPress.Security.EscapeOutput -- stały HTML, treść escapowana
+						?></td>
+						<td><?php echo $row->conv_at ? esc_html( $row->conv_at ) : '–'; ?></td>
 						<td><?php echo ! empty( $row->device_hash ) ? '<code title="Skrót identyfikatora urządzenia – te same znaki = ta sama przeglądarka">' . esc_html( substr( $row->device_hash, 0, 8 ) ) . '</code>' : '–'; ?></td>
 						<td><?php echo esc_html( EVSMS_Vouchers::STATUS_FAILED === $row->status ? (string) $row->error : $row->sms_id ); ?></td>
 					</tr>

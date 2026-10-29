@@ -24,6 +24,8 @@ class EVSMS_Form {
 		add_action( 'wp_ajax_nopriv_evsms_nonce', array( __CLASS__, 'ajax_nonce' ) );
 		add_action( 'wp_ajax_evsms_request', array( __CLASS__, 'ajax_request' ) );
 		add_action( 'wp_ajax_nopriv_evsms_request', array( __CLASS__, 'ajax_request' ) );
+		add_action( 'wp_ajax_evsms_conv', array( __CLASS__, 'ajax_conversion' ) );
+		add_action( 'wp_ajax_nopriv_evsms_conv', array( __CLASS__, 'ajax_conversion' ) );
 	}
 
 	/**
@@ -40,23 +42,37 @@ class EVSMS_Form {
 
 		wp_register_script( 'evsms-form', EVSMS_PLUGIN_URL . 'assets/smsform.js', array(), EVSMS_VERSION, true );
 		wp_localize_script( 'evsms-form', 'evsmsData', array(
-			'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
+			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'blockedPrefixes' => EVSMS_Settings::blocked_prefixes(),
-			'deviceDays'      => (int) EVSMS_Settings::get( 'device_coupons' ) > 0 ? (int) EVSMS_Settings::get( 'device_days' ) : 0,
-			'gift'            => array(
-				'enabled'   => (bool) EVSMS_Settings::get( 'gift_enabled' ),
+			'deviceDays' => (int) EVSMS_Settings::get( 'device_coupons' ) > 0 ? (int) EVSMS_Settings::get( 'device_days' ) : 0,
+			'tracking' => self::tracking_config(),
+			'gift' => array(
+				'enabled' => (bool) EVSMS_Settings::get( 'gift_enabled' ),
 				'shareText' => EVSMS_Settings::msg( 'gift_share_text' ),
-				'copied'    => EVSMS_Settings::msg( 'gift_copied' ),
+				'copied' => EVSMS_Settings::msg( 'gift_copied' ),
 			),
-			'messages'        => array(
-				'phoneEmpty'   => EVSMS_Settings::msg( 'err_phone_empty' ),
-				'phoneLength'  => EVSMS_Settings::msg( 'err_phone_length' ),
+			'messages' => array(
+				'phoneEmpty' => EVSMS_Settings::msg( 'err_phone_empty' ),
+				'phoneLength' => EVSMS_Settings::msg( 'err_phone_length' ),
 				'phoneBlocked' => EVSMS_Settings::msg( 'err_phone_blocked' ),
-				'consent'      => EVSMS_Settings::msg( 'err_consent' ),
-				'deviceWait'   => EVSMS_Settings::msg( 'err_device_wait' ),
-				'generic'      => EVSMS_Settings::msg( 'err_generic' ),
+				'consent' => EVSMS_Settings::msg( 'err_consent' ),
+				'deviceWait' => EVSMS_Settings::msg( 'err_device_wait' ),
+				'generic' => EVSMS_Settings::msg( 'err_generic' ),
 			),
 		) );
+	}
+
+	/**
+	 * Konfiguracja śledzenia konwersji dla skryptu (puste send_to = tylko dataLayer / GA4).
+	 */
+	private static function tracking_config() {
+		return array(
+			'sendTo' => (string) EVSMS_Settings::get( 'conv_send_to' ),
+			'value' => (float) EVSMS_Settings::get( 'conv_value' ),
+			'currency' => (string) EVSMS_Settings::get( 'conv_currency' ),
+			'ga4Event' => (string) EVSMS_Settings::get( 'conv_ga4_event' ),
+			'enhanced' => (bool) EVSMS_Settings::get( 'conv_enhanced' ),
+		);
 	}
 
 	/**
@@ -72,19 +88,39 @@ class EVSMS_Form {
 		);
 
 		register_block_type( 'evillage/smsform', array(
-			'api_version'     => 3,
-			'title'           => 'SMS Kupon',
-			'category'        => 'widgets',
-			'editor_script'   => 'evsms-block',
-			'editor_style'    => 'evsms-form',
-			'render_callback' => array( __CLASS__, 'render_shortcode' ),
-			'attributes'      => array(
-				'title'    => array( 'type' => 'string', 'default' => '' ),
+			'api_version' => 3,
+			'title' => 'SMS Kupon',
+			'category' => 'widgets',
+			'editor_script' => 'evsms-block',
+			'editor_style' => 'evsms-form',
+			'render_callback' => array( __CLASS__, 'render_block' ),
+			'supports' => array(
+				'html' => false,
+				'align' => array( 'left', 'center', 'right', 'wide', 'full' ),
+				'spacing' => array( 'margin' => true ),
+			),
+			'attributes' => array(
+				'textAlign' => array( 'type' => 'string', 'default' => '' ),
+				'title' => array( 'type' => 'string', 'default' => '' ),
 				'subtitle' => array( 'type' => 'string', 'default' => '' ),
-				'button'   => array( 'type' => 'string', 'default' => '' ),
-				'color'    => array( 'type' => 'string', 'default' => '' ),
+				'button' => array( 'type' => 'string', 'default' => '' ),
+				'color' => array( 'type' => 'string', 'default' => '' ),
 			),
 		) );
+	}
+
+	/**
+	 * Blok: formularz w opakowaniu z klasami Gutenberga (wyrównanie bloku i tekstu, marginesy).
+	 */
+	public static function render_block( $atts ) {
+		$align = sanitize_html_class( $atts['textAlign'] ?? '' );
+		unset( $atts['textAlign'], $atts['align'], $atts['style'] );
+
+		return sprintf(
+			'<div %s>%s</div>',
+			get_block_wrapper_attributes( $align ? array( 'class' => 'has-text-align-' . $align ) : array() ),
+			self::render_shortcode( $atts )
+		);
 	}
 
 	/**
@@ -114,22 +150,22 @@ class EVSMS_Form {
 			array_filter( array_map( 'strval', $atts ), 'strlen' )
 		);
 
-		$title    = '' !== $atts['title'] ? $atts['title'] : EVSMS_Settings::msg( 'form_title' );
+		$title = '' !== $atts['title'] ? $atts['title'] : EVSMS_Settings::msg( 'form_title' );
 		$subtitle = '' !== $atts['subtitle'] ? $atts['subtitle'] : EVSMS_Settings::msg( 'form_subtitle' );
-		$button   = '' !== $atts['button'] ? $atts['button'] : EVSMS_Settings::msg( 'form_button' );
-		$consent  = (string) EVSMS_Settings::get( 'consent_text' );
-		$uid      = wp_unique_id( 'evsms-' );
-		$color    = sanitize_hex_color( $atts['color'] );
-		$icon     = EVSMS_Settings::icon_html();
+		$button = '' !== $atts['button'] ? $atts['button'] : EVSMS_Settings::msg( 'form_button' );
+		$consent = (string) EVSMS_Settings::get( 'consent_text' );
+		$uid = wp_unique_id( 'evsms-' );
+		$color = sanitize_hex_color( $atts['color'] );
+		$icon = EVSMS_Settings::icon_html();
 
 		ob_start();
 		?>
-		<div class="evsms"<?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?><?php echo EVSMS_Settings::get( 'share_url' ) ? ' data-share-url="' . esc_url( EVSMS_Settings::get( 'share_url' ) ) . '"' : ''; ?>>
-			<<?php echo $tag; ?> class="evsms-form"<?php echo $preview ? '' : ' novalidate'; ?> aria-labelledby="<?php echo esc_attr( $uid ); ?>-title">
-				<div class="evsms-head">
+		<div class="evsms" <?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?><?php echo EVSMS_Settings::get( 'share_url' ) ? ' data-share-url="' . esc_url( EVSMS_Settings::get( 'share_url' ) ) . '"' : ''; ?>>
+			<<?php echo $tag; ?> class="evsms-form"<?php echo $preview ? '' : ' novalidate'; ?>
+				aria-labelledby="<?php echo esc_attr( $uid ); ?>-title"> <div class="evsms-head">
 					<?php // W podglądzie span zostaje zawsze, żeby panel mógł podmieniać ikonę na żywo ?>
 					<?php if ( '' !== $icon || $preview ) : ?>
-						<span class="evsms-icon" aria-hidden="true"<?php echo '' === $icon ? ' hidden' : ''; ?>><?php echo $icon; // phpcs:ignore WordPress.Security.EscapeOutput -- statyczny SVG / esc_url ?></span>
+						<span class="evsms-icon" aria-hidden="true" <?php echo '' === $icon ? ' hidden' : ''; ?>><?php echo $icon; // phpcs:ignore WordPress.Security.EscapeOutput -- statyczny SVG / esc_url ?></span>
 					<?php endif; ?>
 					<div>
 						<p class="evsms-title" id="<?php echo esc_attr( $uid ); ?>-title"><?php echo esc_html( $title ); ?></p>
@@ -138,62 +174,67 @@ class EVSMS_Form {
 						<?php endif; ?>
 					</div>
 				</div>
-
 				<div class="evsms-field" data-field="phone">
-					<label class="evsms-label" for="<?php echo esc_attr( $uid ); ?>-phone"><?php echo esc_html( EVSMS_Settings::msg( 'form_label' ) ); ?></label>
+					<label class="evsms-label"
+						for="<?php echo esc_attr( $uid ); ?>-phone"><?php echo esc_html( EVSMS_Settings::msg( 'form_label' ) ); ?></label>
 					<div class="evsms-row">
 						<div class="evsms-input">
 							<span class="evsms-prefix" aria-hidden="true">+48</span>
-							<input type="tel" id="<?php echo esc_attr( $uid ); ?>-phone"<?php echo $field( 'phone' ); ?> class="evsms-phone"
-								inputmode="numeric" autocomplete="tel-national" placeholder="600 100 200" maxlength="20"
-								aria-describedby="<?php echo esc_attr( $uid ); ?>-phone-error">
+							<input type="tel" id="<?php echo esc_attr( $uid ); ?>-phone" <?php echo $field( 'phone' ); ?>
+								class="evsms-phone" inputmode="numeric" autocomplete="tel-national" placeholder="600 100 200"
+								maxlength="20" aria-describedby="<?php echo esc_attr( $uid ); ?>-phone-error">
 						</div>
-						<button type="<?php echo $preview ? 'button' : 'submit'; ?>" class="evsms-submit" data-busy="<?php echo esc_attr( EVSMS_Settings::msg( 'form_button_busy' ) ); ?>">
+						<button type="<?php echo $preview ? 'button' : 'submit'; ?>" class="evsms-submit"
+							data-busy="<?php echo esc_attr( EVSMS_Settings::msg( 'form_button_busy' ) ); ?>">
 							<span class="evsms-submit-label"><?php echo esc_html( $button ); ?></span>
 							<span class="evsms-spinner" aria-hidden="true"></span>
 						</button>
 					</div>
 					<p class="evsms-error" id="<?php echo esc_attr( $uid ); ?>-phone-error"></p>
 				</div>
-
 				<?php if ( '' !== $consent ) : ?>
 					<div class="evsms-field" data-field="consent">
 						<label class="evsms-consent">
-							<input type="checkbox"<?php echo $field( 'consent' ); ?> value="1" aria-describedby="<?php echo esc_attr( $uid ); ?>-consent-error">
+							<input type="checkbox" <?php echo $field( 'consent' ); ?> value="1"
+								aria-describedby="<?php echo esc_attr( $uid ); ?>-consent-error">
 							<span><?php echo wp_kses_post( $consent ); ?></span>
 						</label>
 						<p class="evsms-error" id="<?php echo esc_attr( $uid ); ?>-consent-error"></p>
 					</div>
 				<?php endif; ?>
-
 				<?php if ( ! $preview ) : ?>
 					<!-- Honeypot: pole niewidoczne dla ludzi -->
 					<div class="evsms-hp" aria-hidden="true">
 						<label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
 					</div>
 				<?php endif; ?>
-
 				<p class="evsms-msg" role="alert"></p>
-			</<?php echo $tag; ?>>
-
-			<div class="evsms-success" tabindex="-1" hidden>
+			</<?php echo $tag; ?>> <div class="evsms-success" tabindex="-1" hidden>
 				<span class="evsms-success-icon" aria-hidden="true">
-					<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+					<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M20 6 9 17l-5-5" />
+					</svg>
 				</span>
 				<p class="evsms-success-title"></p>
 				<p class="evsms-success-meta"></p>
 			</div>
-
 			<?php if ( ! $preview ) : ?>
 				<div class="evsms-claimed" tabindex="-1" hidden>
-					<span class="evsms-claimed-icon" aria-hidden="true"><?php echo EVSMS_Settings::icon_html( 'gift' ); // phpcs:ignore WordPress.Security.EscapeOutput -- statyczny SVG ?></span>
+					<span class="evsms-claimed-icon"
+						aria-hidden="true"><?php echo EVSMS_Settings::icon_html( 'gift' ); // phpcs:ignore WordPress.Security.EscapeOutput -- statyczny SVG ?></span>
 					<p class="evsms-claimed-title"><?php echo esc_html( EVSMS_Settings::msg( 'err_device_claimed' ) ); ?></p>
 				</div>
-
 				<div class="evsms-gift" hidden>
 					<p class="evsms-gift-text"><?php echo esc_html( EVSMS_Settings::msg( 'gift_text' ) ); ?></p>
 					<button type="button" class="evsms-gift-btn">
-						<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+						<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="18" cy="5" r="3" />
+							<circle cx="6" cy="12" r="3" />
+							<circle cx="18" cy="19" r="3" />
+							<path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+						</svg>
 						<?php echo esc_html( EVSMS_Settings::msg( 'gift_button' ) ); ?>
 					</button>
 					<p class="evsms-gift-status" role="status"></p>
@@ -317,25 +358,75 @@ class EVSMS_Form {
 		}
 
 		try {
-			$result = self::issue_voucher( $phone, $ip_hash, $device );
+			$result = self::issue_voucher( $phone, $ip_hash, $device, self::request_source() );
 		} finally {
 			self::release_lock( $lock );
 		}
 
 		if ( ! $result['success'] ) {
+			// Awaria po stronie SMSAPI nie powinna zużywać cooldownu ani limitu prób użytkownika
+			if ( ! empty( $result['refund'] ) ) {
+				EVSMS_Device::refund( $device );
+			}
 			$extra = ! empty( $result['duplicate'] ) ? array( 'gift' => $gift ) : array();
 			return self::error( $result['message'], $result['status'] ?? 400, $result['field'] ?? '', $extra );
 		}
 
-		return array(
-			'success' => true,
-			'data'    => array(
-				'message'     => EVSMS_Settings::msg( 'success_message' ),
-				'meta'        => EVSMS_Settings::msg( 'success_meta', array( '{phone}' => self::mask_phone( $phone ) ) ),
-				'gift'        => $gift,
-				'claimedDays' => (int) EVSMS_Settings::get( 'device_days' ),
+		$data = array(
+			'message' => EVSMS_Settings::msg( 'success_message' ),
+			// Ukryty duplikat (brak voucher_id): nie obiecujemy SMS-a, którego nie wysłano
+			'meta' => EVSMS_Settings::msg(
+				empty( $result['voucher_id'] ) ? 'success_meta_repeat' : 'success_meta',
+				array( '{phone}' => self::mask_phone( $phone ) )
 			),
+			'gift' => $gift,
+			'claimedDays' => (int) EVSMS_Settings::get( 'device_days' ),
 		);
+
+		// Konwersja tylko, gdy SMS faktycznie wysłano (nie przy ukrytym duplikacie, nie w trybie testowym)
+		if ( ! empty( $result['voucher_id'] ) && ! EVSMS_Settings::get( 'test_mode' ) ) {
+			$data['conversion'] = array(
+				'id' => $result['voucher_id'],
+				'transactionId' => $result['voucher'],
+				'token' => EVSMS_Vouchers::conv_token( $result['voucher_id'] ),
+			);
+		}
+
+		return array( 'success' => true, 'data' => $data );
+	}
+
+	/**
+	 * Źródło zgłoszenia przekazane przez skrypt: strona, gclid i UTM (zsanityzowane, przycięte do długości kolumn).
+	 */
+	private static function request_source() {
+		$get = function ( $key, $max ) {
+			return substr( sanitize_text_field( wp_unslash( $_POST[ $key ] ?? '' ) ), 0, $max );
+		};
+
+		return array(
+			'page' => $get( 'src_page', 255 ),
+			'gclid' => preg_replace( '/[^A-Za-z0-9_\-]/', '', $get( 'src_gclid', 255 ) ),
+			'utm_source' => $get( 'src_utm_source', 100 ),
+			'utm_medium' => $get( 'src_utm_medium', 100 ),
+			'utm_campaign' => $get( 'src_utm_campaign', 150 ),
+		);
+	}
+
+	/**
+	 * Zapisuje sygnał przekazania zdarzenia do warstwy tagowania (podpis chroni przed zgadywaniem ID).
+	 */
+	public static function ajax_conversion() {
+		nocache_headers();
+
+		$id = absint( $_POST['id'] ?? 0 );
+		$token = (string) wp_unslash( $_POST['token'] ?? '' );
+
+		if ( ! $id || ! hash_equals( EVSMS_Vouchers::conv_token( $id ), $token ) ) {
+			wp_send_json_error( null, 403 );
+		}
+
+		EVSMS_Vouchers::mark_converted( $id );
+		wp_send_json_success();
 	}
 
 	/**
@@ -344,8 +435,8 @@ class EVSMS_Form {
 	private static function error( $message, $status, $field = '', $extra = array() ) {
 		return array(
 			'success' => false,
-			'status'  => $status,
-			'data'    => array_merge( array( 'message' => $message, 'field' => $field ), $extra ),
+			'status' => $status,
+			'data' => array_merge( array( 'message' => $message, 'field' => $field ), $extra ),
 		);
 	}
 
@@ -354,7 +445,7 @@ class EVSMS_Form {
 	 *
 	 * @return array{success:bool, message?:string, field?:string, status?:int, duplicate?:bool}
 	 */
-	private static function issue_voucher( $phone, $ip_hash, $device ) {
+	private static function issue_voucher( $phone, $ip_hash, $device, $source = array() ) {
 		if ( EVSMS_Settings::get( 'one_per_phone' ) && EVSMS_Vouchers::phone_has_voucher( $phone ) ) {
 			// Ten sam ekran co przy sukcesie – nie zdradzamy, kto już brał udział w promocji
 			if ( EVSMS_Settings::get( 'hide_duplicate' ) ) {
@@ -369,8 +460,8 @@ class EVSMS_Form {
 		}
 
 		$quota = self::quota_exceeded();
-		$code  = self::generate_code();
-		$id    = $quota ? false : EVSMS_Vouchers::create( $phone, $code, $ip_hash, $device );
+		$code = self::generate_code();
+		$id = $quota ? false : EVSMS_Vouchers::create( $phone, $code, $ip_hash, $device, $source );
 		self::release_lock( 'evsms_quota' );
 
 		if ( $quota ) {
@@ -381,13 +472,13 @@ class EVSMS_Form {
 			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_generic' ) );
 		}
 
-		$number  = EVSMS_Vouchers::format_number( $id );
+		$number = EVSMS_Vouchers::format_number( $id );
 		$message = EVSMS_Settings::msg( 'message', self::placeholders( $number, $code ) );
 
 		$sms = EVSMS_Smsapi::send( $phone, $message, self::sms_idx( $id ) );
 		if ( ! $sms['success'] ) {
 			EVSMS_Vouchers::mark_failed( $id, $sms['error'] );
-			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_sms_failed' ), 'field' => 'phone' );
+			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_sms_failed' ), 'field' => 'phone', 'refund' => true );
 		}
 
 		EVSMS_Vouchers::mark_sent( $id, $sms['sms_id'] );
@@ -403,17 +494,17 @@ class EVSMS_Form {
 		 */
 		do_action( 'evsms_voucher_sent', $id, $number, $phone, $code );
 
-		return array( 'success' => true );
+		return array( 'success' => true, 'voucher_id' => $id, 'voucher' => $number );
 	}
 
 	/**
 	 * Przekroczony limit globalny: 'hour' / 'day' albo '' gdy można wysyłać.
-	 * Liczy wszystkie zarezerwowane numery (także nieudane – próba też mogła kosztować).
+	 * Liczy zarezerwowane numery z pominięciem nieudanych wysyłek.
 	 */
 	private static function quota_exceeded() {
 		$limits = array(
 			'hour' => array( (int) EVSMS_Settings::get( 'max_per_hour' ), HOUR_IN_SECONDS ),
-			'day'  => array( (int) EVSMS_Settings::get( 'max_per_day' ), DAY_IN_SECONDS ),
+			'day' => array( (int) EVSMS_Settings::get( 'max_per_day' ), DAY_IN_SECONDS ),
 		);
 
 		foreach ( $limits as $window => $limit ) {
@@ -429,7 +520,7 @@ class EVSMS_Form {
 	 * Jeden alert e-mail na okno limitu (godzina / doba).
 	 */
 	private static function send_quota_alert( $window ) {
-		$to  = (string) EVSMS_Settings::get( 'notify_email' );
+		$to = (string) EVSMS_Settings::get( 'notify_email' );
 		$key = 'evsms_quota_alert_' . $window;
 		if ( '' === $to || get_transient( $key ) ) {
 			return;
@@ -458,11 +549,13 @@ class EVSMS_Form {
 	/**
 	 * Znaczniki wspólne dla SMS-a i e-maila.
 	 */
-	private static function placeholders( $number, $code ) {
+	private static function placeholders( $number, $code, $phone = '' ) {
 		return array(
-			'{code}'    => $code,
+			'{code}' => $code,
 			'{voucher}' => $number,
-			'{site}'    => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			'{site}' => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			'{phone}' => '' !== (string) $phone ? '+' . $phone : '',
+			'{date}' => current_time( 'd.m.Y H:i:s' ),
 		);
 	}
 
@@ -475,40 +568,37 @@ class EVSMS_Form {
 			return;
 		}
 
-		$subject = EVSMS_Settings::msg( 'email_subject', self::placeholders( $number, $code ) );
-		$rows    = array(
+		$subject = EVSMS_Settings::msg( 'email_subject', self::placeholders( $number, $code, $phone ) );
+		$rows = array(
 			'Numer vouchera' => '<strong style="font-size:18px">' . esc_html( $number ) . '</strong>',
-			'Kod kuponu'     => '<code style="font-size:15px">' . esc_html( $code ) . '</code>',
-			'Telefon'        => '<a href="' . esc_url( 'tel:+' . $phone ) . '">+' . esc_html( $phone ) . '</a>',
-			'Data'           => esc_html( current_time( 'Y-m-d H:i:s' ) ),
+			'Kod kuponu' => '<code style="font-size:15px">' . esc_html( $code ) . '</code>',
+			'Telefon' => '<a href="' . esc_url( 'tel:+' . $phone ) . '">+' . esc_html( $phone ) . '</a>',
+			'Data' => esc_html( current_time( 'd.m.Y H:i:s' ) ),
 		);
 
 		ob_start();
 		?>
-		<div style="background:#f4f5f7;padding:24px 12px;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937">
+		<div
+			style="background:#f4f5f7;padding:24px 12px;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937">
 			<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e5e7eb">
 				<p style="margin:0 0 4px;font-size:13px;color:#6b7280"><?php echo esc_html( get_bloginfo( 'name' ) ); ?></p>
 				<h1 style="margin:0 0 20px;font-size:20px;line-height:1.3">Pobrano voucher rabatowy</h1>
 				<?php if ( EVSMS_Settings::get( 'test_mode' ) ) : ?>
 					<p style="margin:0 0 16px;padding:10px 12px;border-radius:8px;background:#fff7ed;color:#9a3412;font-size:14px">
-						Tryb testowy SMSAPI – SMS nie został realnie dostarczony.
-					</p>
+						Tryb testowy SMSAPI – SMS nie został realnie dostarczony. </p>
 				<?php endif; ?>
 				<table role="presentation" style="width:100%;border-collapse:collapse;font-size:15px">
 					<?php foreach ( $rows as $label => $value ) : ?>
 						<tr>
-							<td style="padding:10px 0;border-top:1px solid #f0f1f3;color:#6b7280;width:40%"><?php echo esc_html( $label ); ?></td>
-							<td style="padding:10px 0;border-top:1px solid #f0f1f3"><?php echo $value; // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane wyżej ?></td>
+							<td style="padding:10px 0;border-top:1px solid #f0f1f3;color:#6b7280;width:40%">
+								<?php echo esc_html( $label ); ?></td>
+							<td style="padding:10px 0;border-top:1px solid #f0f1f3">
+								<?php echo $value; // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane wyżej ?></td>
 						</tr>
 					<?php endforeach; ?>
 				</table>
-				<p style="margin:24px 0 0">
-					<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . EVSMS_Settings::PAGE . '#evsms-tab-vouchers' ) ); ?>"
-						style="display:inline-block;padding:10px 18px;border-radius:8px;background:#1f2937;color:#fff;text-decoration:none;font-weight:600">Zobacz rejestr voucherów</a>
-				</p>
 			</div>
-		</div>
-		<?php
+		</div> <?php
 		$body = ob_get_clean();
 
 		if ( ! wp_mail( $to, $subject, $body, array( 'Content-Type: text/html; charset=UTF-8' ) ) ) {
@@ -561,7 +651,7 @@ class EVSMS_Form {
 		}
 
 		$alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-		$code     = '';
+		$code = '';
 		for ( $i = 0; $i < 8; $i++ ) {
 			$code .= $alphabet[ wp_rand( 0, strlen( $alphabet ) - 1 ) ];
 		}
@@ -578,7 +668,7 @@ class EVSMS_Form {
 			return true;
 		}
 
-		$key   = 'evsms_rl_' . substr( $ip_hash, 0, 32 );
+		$key = 'evsms_rl_' . substr( $ip_hash, 0, 32 );
 		$state = get_transient( $key );
 		if ( ! is_array( $state ) ) {
 			$state = array( 'count' => 0, 'start' => time() );
