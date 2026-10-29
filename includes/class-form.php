@@ -196,6 +196,7 @@ class EVSMS_Form {
 					<div class="evsms-field" data-field="consent">
 						<label class="evsms-consent">
 							<input type="checkbox" <?php echo $field( 'consent' ); ?> value="1"
+								<?php checked( EVSMS_Settings::get( 'consent_checked' ), 1 ); ?>
 								aria-describedby="<?php echo esc_attr( $uid ); ?>-consent-error">
 							<span><?php echo wp_kses_post( $consent ); ?></span>
 						</label>

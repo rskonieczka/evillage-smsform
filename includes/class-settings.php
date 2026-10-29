@@ -249,6 +249,7 @@ class EVSMS_Settings {
 			'conv_ga4_event' => 'generate_lead',
 			'conv_enhanced' => 0,
 			'consent_text' => 'Wyrażam zgodę na przetwarzanie mojego numeru telefonu w celu wysłania kuponu rabatowego.',
+			'consent_checked' => 1,
 			'radius' => '12',
 			'radius_card' => '16',
 			'icon' => 'ticket',
@@ -515,6 +516,7 @@ class EVSMS_Settings {
 		$out['conv_ga4_event'] = substr( preg_replace( '/[^A-Za-z0-9_]/', '', (string) ( $input['conv_ga4_event'] ?? '' ) ), 0, 40 );
 		$out['conv_enhanced'] = empty( $input['conv_enhanced'] ) ? 0 : 1;
 		$out['consent_text'] = wp_kses_post( $input['consent_text'] ?? '' );
+		$out['consent_checked'] = empty( $input['consent_checked'] ) ? 0 : 1;
 
 		// Dopuszczamy kilka adresów rozdzielonych przecinkami
 		$emails = array_filter( array_map( 'sanitize_email', explode( ',', (string) ( $input['notify_email'] ?? '' ) ) ), 'is_email' );
@@ -828,6 +830,10 @@ class EVSMS_Settings {
 												class="large-text"><?php echo esc_textarea( $s['consent_text'] ); ?></textarea>
 											<p class="description">Puste = formularz bez checkboxa zgody. Dozwolone linki HTML (np. do
 												polityki prywatności).</p>
+											<p>
+												<label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[consent_checked]"
+														value="1" <?php checked( $s['consent_checked'], 1 ); ?>> Domyślnie zaznacz checkbox zgody na stronie</label>
+											</p>
 										</td>
 									</tr>
 								<?php endif; ?>

@@ -47,6 +47,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 - Rejestr voucherów w panelu: liczniki wysłanych / nieudanych i 50 ostatnich wpisów.
 - Ochrona: jeden kupon na numer, blokada numerów premium / infolinii / VoIP / stacjonarnych, limit prób z IP, honeypot, nonce odporny na cache strony, blokada równoległych wysyłek na ten sam numer.
 - Wszystkie teksty widoczne dla klienta edytowalne w panelu.
+- Tekst zgody wyświetlany przy checkboxie na stronie (domyślnie zaznaczonym); treść zgody nie jest dodawana do SMS-a.
 - **15 gotowych zestawów kolorów** (kontrast min. 4.5:1, WCAG AA), 8 kolorów do ręcznej zmiany, ikona nagłówka, zaokrąglenia, podgląd na żywo.
 - Dostępność: etykiety, `aria-invalid`, komunikaty błędów powiązane z polami, `role="alert"`, przenoszenie fokusu na potwierdzenie.
 - Responsywny układ – w wąskim kontenerze (telefon, sidebar) przycisk przechodzi pod pole.
@@ -130,6 +131,7 @@ Uwagi:
 
 - Puste pole komunikatu przywraca treść domyślną.
 - Puste pole tekstu zgody **wyłącza checkbox zgody** w formularzu.
+- Checkbox zgody jest domyślnie zaznaczony; można zmienić to ustawienie przy treści zgody w zakładce **Komunikaty**.
 - Puste pole koloru = kolor z palety motywu. Wtyczka korzysta ze zmiennych CSS motywu Blocksy (`--theme-palette-color-*`), a w innych motywach używa własnych kolorów zapasowych. Zestaw „Kolory motywu” czyści wszystkie kolory.
 - Limit prób z IP = `0` wyłącza limit.
 - **Limit wszystkich SMS-ów** (na godzinę i na dobę, ze wszystkich adresów IP łącznie) chroni punkty SMSAPI przed atakiem z wielu adresów. Po przekroczeniu formularz pokazuje komunikat „Wyczerpany limit wysyłek”, a na adres powiadomień idzie jeden alert na okno limitu. `0` wyłącza limit.
@@ -142,6 +144,7 @@ Uwagi:
 | Tryb testowy | włączony |
 | Zamiana polskich znaków | włączona |
 | Treść SMS | `{site}: Twoj kod rabatowy to {code}. Voucher nr {voucher}. Podaj kod przy zamowieniu.` |
+| Domyślne zaznaczenie checkboxa zgody | włączone |
 | Kod | unikalny, prefiks `RABAT-` |
 | Prefiks vouchera | `EV-` |
 | E-mail powiadomień | adres administratora witryny |
