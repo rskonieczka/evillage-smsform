@@ -215,6 +215,8 @@ Zalecenia: trzymaj token w `wp-config.php`, ustaw w SMSAPI limit dzienny / alert
 
 Konwersja jest zgłaszana **dopiero po tym, jak SMSAPI przyjmie SMS z kuponem do wysłania** (odpowiedź z `id` wiadomości). To nie jest raport doręczenia do telefonu – wtyczka go nie odbiera. Nie liczy się samo kliknięcie przycisku, błędny numer, duplikat (przy opcji „nie ujawniaj”) ani tryb testowy.
 
+Dla zdarzenia witrynowego `send_to` utwórz w Google Ads konwersję witryny, np. z kategorią **Przesłanie formularza kontaktowego**. Import CSV z GCLID to odrębna konwersja typu **Import z kliknięć**. Zobacz: [konfiguracja konwersji witryny](https://support.google.com/google-ads/answer/12216226?hl=pl) i [import konwersji z kliknięć](https://support.google.com/google-ads/answer/2998031?hl=pl).
+
 1. **Ustawienia → SMS Kupon → Konwersje**: wpisz `send_to` konwersji Google Ads (`AW-123456789/etykieta`), opcjonalnie wartość i walutę oraz nazwę zdarzenia GA4.
 2. Na stronie musi być tag `gtag.js` (np. z wtyczki Google Ads Multisite). Dla GTM do `dataLayer` trafia zawsze zdarzenie `evsms_coupon_claimed` z `transaction_id`.
 3. `transaction_id` = numer vouchera, więc Google nie policzy tej samej konwersji dwa razy.

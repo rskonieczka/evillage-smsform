@@ -591,9 +591,11 @@ class EVSMS_Form {
 					<?php foreach ( $rows as $label => $value ) : ?>
 						<tr>
 							<td style="padding:10px 0;border-top:1px solid #f0f1f3;color:#6b7280;width:40%">
-								<?php echo esc_html( $label ); ?></td>
+								<?php echo esc_html( $label ); ?>
+							</td>
 							<td style="padding:10px 0;border-top:1px solid #f0f1f3">
-								<?php echo $value; // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane wyżej ?></td>
+								<?php echo $value; // phpcs:ignore WordPress.Security.EscapeOutput -- escapowane wyżej ?>
+							</td>
 						</tr>
 					<?php endforeach; ?>
 				</table>
