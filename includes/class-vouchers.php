@@ -243,6 +243,40 @@ class EVSMS_Vouchers {
 	}
 
 	/**
+	 * Usuwa wybrane rekordy voucherów.
+	 *
+	 * @param int[] $ids Identyfikatory rekordów.
+	 * @return int|false Liczba usuniętych rekordów albo false w razie błędu bazy.
+	 */
+	public static function delete_by_ids( $ids ) {
+		global $wpdb;
+
+		$ids = array_values( array_unique( array_filter( array_map( 'absint', array_filter( (array) $ids, 'is_scalar' ) ) ) ) );
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$query        = $wpdb->prepare(
+			'DELETE FROM ' . self::table() . " WHERE id IN ({$placeholders})",
+			...$ids
+		);
+
+		return $wpdb->query( $query );
+	}
+
+	/**
+	 * Usuwa wszystkie rekordy voucherów bez zmiany licznika AUTO_INCREMENT.
+	 *
+	 * @return int|false Liczba usuniętych rekordów albo false w razie błędu bazy.
+	 */
+	public static function delete_all() {
+		global $wpdb;
+
+		return $wpdb->query( 'DELETE FROM ' . self::table() );
+	}
+
+	/**
 	 * Formatuje numer vouchera, np. EV-000123.
 	 */
 	public static function format_number( $id ) {

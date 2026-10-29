@@ -2,7 +2,7 @@
 /**
  * Plugin Name: EVILLAGE.PL - SMS Form (kupon rabatowy)
  * Description: Formularz pobrania kuponu rabatowego wysyłanego SMS-em przez SMSAPI. Po wysłaniu kuponu wysyła e-mail z numerem vouchera (autonumer). Blok „SMS Kupon” lub shortcode [evillage_smsform]
- * Version: 1.4.1
+ * Version: 1.5.0
  * Author: Rafał Skonieczka
  * Author URI: http://evillage.pl
  * Text Domain: evillage-smsform
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EVSMS_VERSION', '1.4.1' );
+define( 'EVSMS_VERSION', '1.5.0' );
 define( 'EVSMS_DB_VERSION', '3' );
 define( 'EVSMS_PLUGIN_FILE', __FILE__ );
 define( 'EVSMS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );

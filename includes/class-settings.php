@@ -22,6 +22,7 @@ class EVSMS_Settings {
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'test_mode_notice' ) );
 		add_action( 'admin_post_evsms_export', array( __CLASS__, 'export_csv' ) );
+		add_action( 'admin_post_evsms_delete_vouchers', array( __CLASS__, 'delete_vouchers' ) );
 		add_filter( 'plugin_action_links_' . EVSMS_PLUGIN_BASENAME, array( __CLASS__, 'add_settings_link' ) );
 		add_filter( 'plugin_row_meta', array( __CLASS__, 'add_row_meta' ), 10, 2 );
 	}
@@ -1003,6 +1004,60 @@ class EVSMS_Settings {
 	}
 
 	/**
+	 * Usuwa pojedyncze lub wybrane vouchery albo cały rejestr.
+	 */
+	public static function delete_vouchers() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Brak uprawnień.', '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'evsms_delete_vouchers' );
+
+		$raw_mode = wp_unslash( $_POST['mode'] ?? '' );
+		$mode     = is_string( $raw_mode ) ? sanitize_key( $raw_mode ) : '';
+
+		if ( 'all' === $mode ) {
+			$deleted = EVSMS_Vouchers::delete_all();
+		} elseif ( 'single' === $mode ) {
+			$raw_id = wp_unslash( $_POST['id'] ?? 0 );
+			$id     = is_scalar( $raw_id ) ? absint( $raw_id ) : 0;
+			if ( ! $id ) {
+				wp_die( 'Nieprawidłowy numer vouchera.', '', array( 'response' => 400 ) );
+			}
+			$deleted = EVSMS_Vouchers::delete_by_ids( array( $id ) );
+		} elseif ( 'selected' === $mode ) {
+			$raw_ids = array_filter( (array) wp_unslash( $_POST['ids'] ?? array() ), 'is_scalar' );
+			$ids     = array_values( array_unique( array_filter( array_map( 'absint', $raw_ids ) ) ) );
+			if ( empty( $ids ) ) {
+				self::redirect_after_voucher_delete( array( 'evsms_delete_error' => 'no_selection' ) );
+			}
+			$deleted = EVSMS_Vouchers::delete_by_ids( $ids );
+		} else {
+			wp_die( 'Nieprawidłowa operacja usuwania.', '', array( 'response' => 400 ) );
+		}
+
+		if ( false === $deleted ) {
+			wp_die( 'Nie udało się usunąć voucherów z rejestru.', '', array( 'response' => 500 ) );
+		}
+
+		self::redirect_after_voucher_delete( array(
+			'evsms_deleted' => $deleted,
+		) );
+	}
+
+	/**
+	 * Wraca do zakładki voucherów z wynikiem operacji.
+	 */
+	private static function redirect_after_voucher_delete( $args ) {
+		$url = add_query_arg(
+			array_merge( array( 'page' => self::PAGE ), $args ),
+			admin_url( 'options-general.php' )
+		) . '#evsms-tab-vouchers';
+
+		wp_safe_redirect( $url );
+		exit;
+	}
+
+	/**
 	 * Podsumowanie i tabela ostatnich voucherów.
 	 */
 	private static function render_vouchers_table() {
@@ -1025,7 +1080,17 @@ class EVSMS_Settings {
 		<?php
 		$conv = EVSMS_Vouchers::conversion_stats();
 		$rate = $conv['sent'] > 0 ? round( 100 * $conv['confirmed'] / $conv['sent'] ) : 0;
+		$raw_delete_error = wp_unslash( $_GET['evsms_delete_error'] ?? '' );
+		$delete_error     = is_string( $raw_delete_error ) ? sanitize_key( $raw_delete_error ) : '';
 		?>
+		<?php if ( 'no_selection' === $delete_error ) : ?>
+			<div class="notice notice-error inline"><p>Zaznacz co najmniej jeden voucher do usunięcia.</p></div>
+		<?php elseif ( isset( $_GET['evsms_deleted'] ) && is_scalar( $_GET['evsms_deleted'] ) ) : ?>
+			<div class="notice notice-success inline"><p><?php
+				$deleted = absint( wp_unslash( $_GET['evsms_deleted'] ) );
+				echo esc_html( $deleted > 0 ? sprintf( 'Usunięto voucherów: %s.', number_format_i18n( $deleted ) ) : 'Nie znaleziono voucherów do usunięcia.' );
+			?></p></div>
+		<?php endif; ?>
 		<h3>Konwersje</h3>
 		<ul class="evsms-stats">
 			<li class="evsms-stat"><strong><?php echo esc_html( number_format_i18n( $conv['sent'] ) ); ?></strong><span>Kupony wysłane (SMS przyjęty przez SMSAPI)</span></li>
@@ -1042,13 +1107,29 @@ class EVSMS_Settings {
 			return;
 		}
 		?>
+		<p class="description">Zaznaczyć można wpisy z widocznej listy (ostatnie 50). Usunięcie rekordu jest trwałe, usuwa go ze statystyk i eksportu oraz znosi blokadę „jeden kupon na numer” dla tego telefonu.</p>
+		<div class="evsms-voucher-actions">
+			<form id="evsms-bulk-delete-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" data-confirm="Usunąć zaznaczone vouchery? Tej operacji nie można cofnąć. Usunięte numery telefonu będą mogły ponownie odebrać kupon.">
+				<input type="hidden" name="action" value="evsms_delete_vouchers">
+				<input type="hidden" name="mode" value="selected">
+				<?php wp_nonce_field( 'evsms_delete_vouchers' ); ?>
+				<button type="submit" class="button">Usuń zaznaczone</button>
+			</form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" data-confirm="Usunąć WSZYSTKIE vouchery z rejestru? Tej operacji nie można cofnąć. Wszystkie numery telefonu będą mogły ponownie odebrać kupon.">
+				<input type="hidden" name="action" value="evsms_delete_vouchers">
+				<input type="hidden" name="mode" value="all">
+				<?php wp_nonce_field( 'evsms_delete_vouchers' ); ?>
+				<button type="submit" class="button button-link-delete">Usuń wszystkie vouchery</button>
+			</form>
+		</div>
 		<table class="widefat striped evsms-vouchers">
 			<thead>
-				<tr><th>Numer</th><th>Data</th><th>Telefon</th><th>Kod</th><th>Status</th><th>Źródło</th><th>Sygnał tagowania</th><th>Urządzenie</th><th>ID SMS / błąd</th></tr>
+				<tr><th scope="col">Zaznacz</th><th scope="col">Numer</th><th scope="col">Data</th><th scope="col">Telefon</th><th scope="col">Kod</th><th scope="col">Status</th><th scope="col">Źródło</th><th scope="col">Sygnał tagowania</th><th scope="col">Urządzenie</th><th scope="col">ID SMS / błąd</th><th scope="col">Akcja</th></tr>
 			</thead>
 			<tbody>
 				<?php foreach ( $rows as $row ) : ?>
 					<tr>
+						<td><input type="checkbox" form="evsms-bulk-delete-form" name="ids[]" value="<?php echo esc_attr( $row->id ); ?>" aria-label="<?php echo esc_attr( 'Zaznacz voucher ' . EVSMS_Vouchers::format_number( $row->id ) ); ?>"></td>
 						<td><strong><?php echo esc_html( EVSMS_Vouchers::format_number( $row->id ) ); ?></strong></td>
 						<td><?php echo esc_html( $row->created_at ); ?></td>
 						<td><a href="<?php echo esc_url( 'tel:+' . $row->phone ); ?>">+<?php echo esc_html( $row->phone ); ?></a></td>
@@ -1062,6 +1143,15 @@ class EVSMS_Settings {
 						<td><?php echo $row->conv_at ? esc_html( $row->conv_at ) : '–'; ?></td>
 						<td><?php echo ! empty( $row->device_hash ) ? '<code title="Skrót identyfikatora urządzenia – te same znaki = ta sama przeglądarka">' . esc_html( substr( $row->device_hash, 0, 8 ) ) . '</code>' : '–'; ?></td>
 						<td><?php echo esc_html( EVSMS_Vouchers::STATUS_FAILED === $row->status ? (string) $row->error : $row->sms_id ); ?></td>
+						<td>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" data-confirm="<?php echo esc_attr( 'Usunąć voucher ' . EVSMS_Vouchers::format_number( $row->id ) . '? Tej operacji nie można cofnąć. Numer telefonu będzie mógł ponownie odebrać kupon.' ); ?>">
+								<input type="hidden" name="action" value="evsms_delete_vouchers">
+								<input type="hidden" name="mode" value="single">
+								<input type="hidden" name="id" value="<?php echo esc_attr( $row->id ); ?>">
+								<?php wp_nonce_field( 'evsms_delete_vouchers' ); ?>
+								<button type="submit" class="button-link-delete">Usuń</button>
+							</form>
+						</td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>

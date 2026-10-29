@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.4.1 |
+| Wersja | 1.5.0 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -121,7 +121,7 @@ Pominięty lub pusty atrybut = wartość z panelu ustawień. Na jednej stronie m
 | Wygląd | 15 zestawów kolorów, 8 kolorów do ręcznej zmiany, ikona nagłówka (10 wbudowanych, własny obrazek z biblioteki mediów albo brak), zaokrąglenie ramki oraz pól i przycisku (0–40 px), podgląd na żywo |
 | Powiadomienia | adresy e-mail, temat e-maila |
 | Konwersje | etykieta konwersji Google Ads, wartość, zdarzenie GA4, rozszerzone konwersje |
-| Vouchery | liczniki wysłanych/nieudanych, statystyki konwersji, eksport CSV i 50 ostatnich voucherów (ze źródłem i statusem konwersji) |
+| Vouchery | liczniki wysłanych/nieudanych, statystyki konwersji, eksport CSV, 50 ostatnich voucherów (ze źródłem i statusem konwersji), usuwanie pojedynczych, zaznaczonych lub wszystkich rekordów |
 | Dokumentacja | ten plik README wyświetlony w panelu (ze spisem treści) |
 
 Nad zakładkami jest pasek **Pomoc** z linkami: dokumentacja wtyczki, SMSAPI – tokeny API, pola nadawcy i dokumentacja API. Te same linki są przy polach token i pole nadawcy, a na liście wtyczek – link „Dokumentacja”.
@@ -313,7 +313,7 @@ Ciasteczko `evsms_device` jest techniczne (ochrona przed nadużyciami, losowy id
 
 Co jest zapisywane w bazie: numer telefonu **jawnie** (potrzebny do blokady „jeden kupon na numer”), kod kuponu, status i identyfikator wysyłki SMSAPI, opis błędu, **skrót HMAC adresu IP** (bez możliwości odczytania adresu) i data. Numer telefonu trafia także do e-maila powiadomienia.
 
-Wtyczka nie integruje się (jeszcze) z narzędziami eksportu / usuwania danych osobowych WordPressa – żądania usunięcia danych trzeba obsłużyć ręcznie w tabeli `{prefix}evsms_vouchers`.
+Wtyczka nie integruje się (jeszcze) z narzędziami eksportu / usuwania danych osobowych WordPressa. Administrator może usuwać pojedyncze lub wybrane rekordy, a także cały rejestr w zakładce **Ustawienia → SMS Kupon → Vouchery**; żądania dotyczące konkretnej osoby trzeba obsłużyć ręcznie, weryfikując jej dane.
 
 ## Dane w bazie i odinstalowanie
 
@@ -382,6 +382,11 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.5.0
+
+- Dodano usuwanie pojedynczych voucherów, zaznaczonych rekordów z widocznej listy oraz całego rejestru; operacje wymagają uprawnień administratora i nonce WordPressa.
+- Dodano potwierdzenie przed usunięciem oraz komunikat o wyniku operacji. Usunięcie jest trwałe i znosi blokadę „jeden kupon na numer” dla usuniętych numerów.
 
 ### 1.4.1
 

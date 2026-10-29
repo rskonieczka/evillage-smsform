@@ -337,3 +337,9 @@
 	border-left: 4px solid #dba617;
 	background: #fcf9e8;
 }
+.evsms-voucher-actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 12px 0;
+}
