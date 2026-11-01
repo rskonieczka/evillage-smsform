@@ -221,6 +221,44 @@
 	outline-offset: 2px;
 }
 
+/* Wybór układu: schemat pola (szare) i przycisku (niebieski) */
+.evsms-layout-choice {
+	width: 96px;
+}
+
+.evsms-layout-tile {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	width: 80px;
+	padding: 0 10px;
+}
+
+.evsms-layout-tile i {
+	height: 10px;
+	border-radius: 2px;
+	background: #c3c4c7;
+}
+
+.evsms-layout-tile i:first-child {
+	flex: 1 1 auto;
+}
+
+.evsms-layout-tile i:last-child {
+	flex: 0 0 18px;
+	background: #2271b1;
+}
+
+.evsms-layout-tile--stacked {
+	flex-direction: column;
+	justify-content: center;
+	align-items: stretch;
+}
+
+.evsms-layout-tile--stacked i:last-child {
+	flex-basis: 10px;
+}
+
 .evsms-icon-name {
 	font-size: 11px;
 	color: #50575e;

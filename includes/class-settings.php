@@ -181,6 +181,16 @@ class EVSMS_Settings {
 	}
 
 	/**
+	 * Układ pola numeru i przycisku: klucz => [etykieta, podpowiedź].
+	 */
+	public static function layouts() {
+		return array(
+			'inline' => array( 'Obok siebie', 'Pole i przycisk w jednej linii (na wąskim ekranie przycisk i tak schodzi pod pole).' ),
+			'stacked' => array( 'W dwóch liniach', 'Pole numeru, a pod nim przycisk – oba na 100% szerokości.' ),
+		);
+	}
+
+	/**
 	 * Deklaracje zmiennych CSS z ustawień wyglądu (do .evsms{...}).
 	 */
 	public static function css_vars() {
@@ -254,6 +264,7 @@ class EVSMS_Settings {
 			'radius_card' => '16',
 			'icon' => 'ticket',
 			'icon_url' => '',
+			'layout' => 'inline',
 		);
 
 		foreach ( self::messages() as $key => $def ) {
@@ -494,6 +505,8 @@ class EVSMS_Settings {
 			add_settings_error( self::OPTION, 'evsms_icon_url', 'Wybrano własną ikonę, ale nie wskazano obrazka – przywrócono ikonę „Kupon”.', 'warning' );
 			$out['icon'] = $defaults['icon'];
 		}
+		$layout = (string) ( $input['layout'] ?? '' );
+		$out['layout'] = isset( self::layouts()[ $layout ] ) ? $layout : $defaults['layout'];
 		$out['max_per_ip_hour'] = max( 0, absint( $input['max_per_ip_hour'] ?? 0 ) );
 		$out['max_per_hour'] = max( 0, absint( $input['max_per_hour'] ?? 0 ) );
 		$out['max_per_day'] = max( 0, absint( $input['max_per_day'] ?? 0 ) );
@@ -565,7 +578,7 @@ class EVSMS_Settings {
 			<h1>EVILLAGE SMS Kupon</h1>
 			<p>Formularz wstawisz blokiem <strong>„SMS Kupon”</strong> w edytorze albo shortcodem
 				<code>[evillage_smsform]</code> (atrybuty: <code>title</code>, <code>subtitle</code>, <code>button</code>,
-				<code>color="#e11d48"</code>).</p>
+				<code>color="#e11d48"</code>, <code>layout="stacked"</code>).</p>
 			<p class="evsms-help">
 				<span class="dashicons dashicons-editor-help" aria-hidden="true"></span>
 				<strong>Pomoc:</strong>
@@ -919,6 +932,25 @@ class EVSMS_Settings {
 										<p class="description">Najlepiej kwadratowy SVG lub PNG (min. 52×52 px). Wyświetlany w
 											kółku o rozmiarze 44 px.</p>
 									</div>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row">Układ pola i przycisku</th>
+								<td>
+									<fieldset class="evsms-icons">
+										<legend class="screen-reader-text">Układ pola numeru i przycisku</legend>
+										<?php foreach ( self::layouts() as $key => $def ) : ?>
+											<label class="evsms-icon-choice evsms-layout-choice" title="<?php echo esc_attr( $def[1] ); ?>">
+												<input type="radio" name="<?php echo esc_attr( $name ); ?>[layout]"
+													value="<?php echo esc_attr( $key ); ?>" <?php checked( $s['layout'], $key ); ?>>
+												<span class="evsms-icon-tile evsms-layout-tile evsms-layout-tile--<?php echo esc_attr( $key ); ?>"
+													aria-hidden="true"><i></i><i></i></span>
+												<span class="evsms-icon-name"><?php echo esc_html( $def[0] ); ?></span>
+											</label>
+										<?php endforeach; ?>
+									</fieldset>
+									<p class="description">„W dwóch liniach” = pole numeru, a pod nim przycisk, oba na 100% szerokości.
+										Na wąskim ekranie (do 420 px) przycisk zawsze schodzi pod pole.</p>
 								</td>
 							</tr>
 							<?php foreach ( self::colors() as $key => $def ) : ?>

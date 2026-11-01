@@ -296,6 +296,14 @@
 	wrap.querySelectorAll('input[name$="[icon]"]').forEach(function (radio) {
 		radio.addEventListener('change', updateIcon);
 	});
+
+	wrap.querySelectorAll('input[name$="[layout]"]').forEach(function (radio) {
+		radio.addEventListener('change', function () {
+			if (preview && radio.checked) {
+				preview.classList.toggle('evsms--stacked', 'stacked' === radio.value);
+			}
+		});
+	});
 	iconUrl.addEventListener('input', updateIcon);
 
 	var mediaFrame;

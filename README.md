@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.5.0 |
+| Wersja | 1.6.0 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -107,6 +107,7 @@ W edytorze blokowym dodaj blok **„SMS Kupon”** (kategoria *Widżety*, słowa
 | `subtitle` | podtytuł |
 | `button` | treść przycisku |
 | `color` | kolor przycisku i akcentów (HEX) |
+| `layout` | `inline` – pole i przycisk obok siebie, `stacked` – w dwóch liniach, oba na 100% szerokości |
 
 Pominięty lub pusty atrybut = wartość z panelu ustawień. Na jednej stronie może być kilka formularzy.
 
@@ -277,7 +278,7 @@ Kody HTTP błędów: `400` – walidacja, `403` – nonce, `409` – trwa wysył
 
 ### Blok
 
-Nazwa bloku: `evillage/smsform` (render po stronie serwera, atrybuty `title`, `subtitle`, `button`, `color`).
+Nazwa bloku: `evillage/smsform` (render po stronie serwera, atrybuty `title`, `subtitle`, `button`, `color`, `layout`).
 
 ### Style
 
@@ -387,6 +388,10 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.6.0
+
+- Układ „W dwóch liniach”: pole numeru, a pod nim przycisk, oba na 100% szerokości. Wybór w zakładce Wygląd (kafelki ze schematem, podgląd na żywo), w bloku (panel „Układ”) i atrybutem shortcode `layout="stacked"`.
 
 ### 1.5.0
 

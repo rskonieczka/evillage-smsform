@@ -300,6 +300,27 @@
 	}
 }
 
+/* Układ „W dwóch liniach”: pole numeru, pod nim przycisk – oba na 100% szerokości.
+   Błąd zostaje tuż pod polem, przycisk pod nim – kolejność tabulacji bez zmian */
+.evsms--stacked .evsms-field[data-field="phone"] {
+	display: flex;
+	flex-direction: column;
+}
+
+.evsms--stacked .evsms-row {
+	display: contents;
+}
+
+.evsms--stacked .evsms-field[data-field="phone"] .evsms-error {
+	order: 1;
+}
+
+.evsms.evsms--stacked .evsms-submit {
+	order: 2;
+	width: 100% !important;
+	margin-top: 10px;
+}
+
 /* Wąski kontener (telefon, sidebar): przycisk pod polem na pełną szerokość */
 @container (max-width: 420px) {
 	/* Błąd zostaje tuż pod polem, przycisk pod nim – kolejność tabulacji bez zmian */

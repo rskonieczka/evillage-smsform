@@ -105,6 +105,7 @@ class EVSMS_Form {
 				'subtitle' => array( 'type' => 'string', 'default' => '' ),
 				'button' => array( 'type' => 'string', 'default' => '' ),
 				'color' => array( 'type' => 'string', 'default' => '' ),
+				'layout' => array( 'type' => 'string', 'default' => '' ),
 			),
 		) );
 	}
@@ -146,7 +147,7 @@ class EVSMS_Form {
 		};
 
 		$atts = array_merge(
-			array( 'title' => '', 'subtitle' => '', 'button' => '', 'color' => '' ),
+			array( 'title' => '', 'subtitle' => '', 'button' => '', 'color' => '', 'layout' => '' ),
 			array_filter( array_map( 'strval', $atts ), 'strlen' )
 		);
 
@@ -157,10 +158,11 @@ class EVSMS_Form {
 		$uid = wp_unique_id( 'evsms-' );
 		$color = sanitize_hex_color( $atts['color'] );
 		$icon = EVSMS_Settings::icon_html();
+		$layout = isset( EVSMS_Settings::layouts()[ $atts['layout'] ] ) ? $atts['layout'] : (string) EVSMS_Settings::get( 'layout' );
 
 		ob_start();
 		?>
-		<div class="evsms" <?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?><?php echo EVSMS_Settings::get( 'share_url' ) ? ' data-share-url="' . esc_url( EVSMS_Settings::get( 'share_url' ) ) . '"' : ''; ?>>
+		<div class="evsms<?php echo 'stacked' === $layout ? ' evsms--stacked' : ''; ?>" <?php echo $color ? ' style="' . esc_attr( '--evsms-accent:' . $color ) . '"' : ''; ?><?php echo EVSMS_Settings::get( 'share_url' ) ? ' data-share-url="' . esc_url( EVSMS_Settings::get( 'share_url' ) ) . '"' : ''; ?>>
 			<<?php echo $tag; ?> class="evsms-form"<?php echo $preview ? '' : ' novalidate'; ?>
 				aria-labelledby="<?php echo esc_attr( $uid ); ?>-title"> <div class="evsms-head">
 					<?php // W podglądzie span zostaje zawsze, żeby panel mógł podmieniać ikonę na żywo ?>

@@ -32,7 +32,8 @@
 			title: { type: 'string', default: '' },
 			subtitle: { type: 'string', default: '' },
 			button: { type: 'string', default: '' },
-			color: { type: 'string', default: '' }
+			color: { type: 'string', default: '' },
+			layout: { type: 'string', default: '' }
 		},
 
 		edit: function (props) {
@@ -58,6 +59,22 @@
 						textControl(props, 'title', 'Tytuł'),
 						textControl(props, 'subtitle', 'Podtytuł'),
 						textControl(props, 'button', 'Treść przycisku')
+					),
+					el(
+						components.PanelBody,
+						{ title: 'Układ', initialOpen: false },
+						el(components.SelectControl, {
+							label: 'Pole numeru i przycisk',
+							value: props.attributes.layout,
+							options: [
+								{ label: 'Z ustawień (zakładka Wygląd)', value: '' },
+								{ label: 'Obok siebie', value: 'inline' },
+								{ label: 'W dwóch liniach (100% szerokości)', value: 'stacked' }
+							],
+							onChange: function (value) {
+								props.setAttributes({ layout: value });
+							}
+						})
 					),
 					el(
 						components.PanelBody,
