@@ -258,6 +258,7 @@ class EVSMS_Settings {
 			'conv_currency' => 'PLN',
 			'conv_ga4_event' => 'generate_lead',
 			'conv_enhanced' => 0,
+			'conv_compat' => 1,
 			'consent_text' => 'Wyrażam zgodę na przetwarzanie mojego numeru telefonu w celu wysłania kuponu rabatowego.',
 			'consent_checked' => 1,
 			'radius' => '12',
@@ -528,6 +529,7 @@ class EVSMS_Settings {
 		$out['conv_currency'] = strtoupper( substr( preg_replace( '/[^A-Za-z]/', '', (string) ( $input['conv_currency'] ?? '' ) ), 0, 3 ) ) ?: 'PLN';
 		$out['conv_ga4_event'] = substr( preg_replace( '/[^A-Za-z0-9_]/', '', (string) ( $input['conv_ga4_event'] ?? '' ) ), 0, 40 );
 		$out['conv_enhanced'] = empty( $input['conv_enhanced'] ) ? 0 : 1;
+		$out['conv_compat'] = empty( $input['conv_compat'] ) ? 0 : 1;
 		$out['consent_text'] = wp_kses_post( $input['consent_text'] ?? '' );
 		$out['consent_checked'] = empty( $input['consent_checked'] ) ? 0 : 1;
 
@@ -1055,6 +1057,19 @@ class EVSMS_Settings {
 								<p class="description">Nazwa zdarzenia wysyłanego do GA4 (domyślnie <code>generate_lead</code>).
 									Puste = bez zdarzenia GA4. Niezależnie od tego do <code>dataLayer</code> trafia zawsze
 									zdarzenie <code>evsms_coupon_claimed</code> (dla Google Tag Managera).</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">Zgodność z wyzwalaczami</th>
+							<td>
+								<label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[conv_compat]" value="1"
+										<?php checked( $s['conv_compat'], 1 ); ?>> Zdarzenie <code>submit</code> tylko po wysłaniu
+									SMS-a z kuponem</label>
+								<p class="description">Kliknięcie „Odbierz” nie jest widoczne dla skryptów analitycznych
+									(wyzwalacz GTM „Przesłanie formularza”, pomiar formularzy GA4, piksele), więc błędny numer,
+									duplikat czy limit nie liczą się jako konwersja. Po wysłaniu SMS-a formularz emituje jedno
+									zdarzenie <code>submit</code> – istniejące wyzwalacze GTM nie wymagają zmian. Wyłączenie
+									przywraca zwykłe zdarzenie <code>submit</code> przy każdym kliknięciu.</p>
 							</td>
 						</tr>
 						<tr>

@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.6.0 |
+| Wersja | 1.7.0 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -154,6 +154,7 @@ Uwagi:
 | Limit prób z IP | 3 na godzinę |
 | Limit wszystkich SMS-ów | 30 na godzinę, 200 na dobę |
 | Nie ujawniaj powtórzonego numeru | włączone |
+| Zgodność z wyzwalaczami (Konwersje) | włączona |
 
 ## Znaczniki w treściach
 
@@ -229,6 +230,18 @@ Dla zdarzenia witrynowego `send_to` utwórz w Google Ads konwersję witryny, np.
 6. Zakładka **Vouchery → Pobierz CSV** daje plik z kolumnami `Google Click ID`, `Conversion Name`, `Conversion Time` (ze strefą z daty rekordu), `Conversion Value`, `Conversion Currency`, `Order ID` (tylko vouchery z `gclid`). W Google Ads potrzebna jest osobna konwersja typu „import z kliknięć”, a jej nazwę wpisz w ustawieniach (Nazwa konwersji do importu). Kolumn nie porównywałem z aktualnym szablonem Google – przed pierwszym importem sprawdź go w Google Ads.
 
 Uwaga: wtyczka Google Ads Multisite pomija od tej wersji formularz `.evsms-form` w ogólnej konwersji „form” (inaczej każde kliknięcie liczyłoby się jako konwersja).
+
+### Zgodność z wyzwalaczami „Przesłanie formularza”
+
+Formularz ma `novalidate` i wysyła dane przez AJAX, więc zwykłe zdarzenie `submit` powstaje przy każdym kliknięciu „Odbierz” – także przy pustym numerze. Wyzwalacz GTM „Przesłanie formularza” bez opcji „Sprawdź poprawność”, pomiar formularzy GA4 czy piksele liczyłyby wtedy każdą próbę jako konwersję.
+
+Opcja **Konwersje → Zgodność z wyzwalaczami** (domyślnie włączona):
+
+1. Skrypt inline w `<head>` (`#evsms-tracking-guard`) zatrzymuje kliknięcie „Odbierz” na `window` w fazie capture, zanim zobaczą je GTM i inne skrypty, i przekazuje je do obsługi formularza.
+2. Po wysłaniu SMS-a (ta sama chwila co `evsms_coupon_claimed`) formularz emituje jedno zdarzenie `submit`, które istniejące wyzwalacze liczą jako konwersję. Nie ma go przy błędzie walidacji, duplikacie, limicie, awarii SMS ani w trybie testowym.
+3. Przy GTM z opcją „Czekaj na tagi” wywołanie `form.submit()` dla emitowanego zdarzenia jest ignorowane, żeby strona się nie przeładowała.
+
+Zalecany wyzwalacz w GTM to nadal zdarzenie niestandardowe `evsms_coupon_claimed` (z `transaction_id`). Wyłączenie opcji przywraca zwykłe zdarzenie `submit` przy każdym kliknięciu.
 
 Opcja „Rozszerzone konwersje” przekazuje numer telefonu do Google (haszowany przez gtag) – włącz ją tylko, jeśli pozwala na to polityka prywatności i zgoda.
 
@@ -388,6 +401,10 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.7.0
+
+- Zgodność z wyzwalaczami „Przesłanie formularza” (GTM, GA4, piksele): kliknięcie „Odbierz” nie jest już widoczne dla skryptów analitycznych, a jedno zdarzenie `submit` powstaje dopiero po wysłaniu SMS-a z kuponem. Pusty lub błędny numer, duplikat i limity nie liczą się już jako konwersja bez zmian w kontenerze GTM. Przełącznik w zakładce Konwersje (domyślnie włączony).
 
 ### 1.6.0
 

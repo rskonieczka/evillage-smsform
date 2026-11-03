@@ -204,6 +204,64 @@
 
 	/* Konwersje ---------------------------------------------------------------- */
 
+	/* Zgodność z wyzwalaczami „Przesłanie formularza” (GTM, GA4, piksele): klik „Odbierz”
+	   nie wychodzi poza formularz, a po wysłaniu SMS-a emitujemy jeden submit, który te
+	   narzędzia liczą jako konwersję – bez zmian w konfiguracji GTM. */
+	var compat = !!(evsmsData.tracking && evsmsData.tracking.compat);
+	var replaying = null;
+
+	/* Blokada na window w fazie capture – pierwszy punkt propagacji. Ten sam kod jest drukowany
+	   inline w <head> (EVSMS_Form::print_tracking_guard), żeby zarejestrować się przed GTM;
+	   tu jest fallback, gdy motyw nie woła wp_head. Zmieniać obie kopie. */
+	if (compat && !window.evsmsGuard) {
+		window.evsmsGuard = 1;
+		window.addEventListener('submit', function (e) {
+			var f = e.target;
+			if (!f || !f.matches || !f.matches('form.evsms-form') || f.evsmsReplay) {
+				return;
+			}
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			if (typeof window.evsmsSubmit === 'function') {
+				window.evsmsSubmit(f);
+			}
+		}, true);
+	}
+
+	/* GTM z „Czekaj na tagi” blokuje submit i po tagach woła form.submit() – dla emitowanego
+	   zdarzenia byłoby to zwykłe wysłanie GET z przeładowaniem (i numerem w adresie). */
+	if (compat && window.HTMLFormElement) {
+		['submit', 'requestSubmit'].forEach(function (name) {
+			var native = HTMLFormElement.prototype[name];
+			if (typeof native !== 'function') {
+				return;
+			}
+			HTMLFormElement.prototype[name] = function () {
+				if (this === replaying) {
+					return;
+				}
+				return native.apply(this, arguments);
+			};
+		});
+	}
+
+	function emitSubmit(form) {
+		if (!compat) {
+			return;
+		}
+		replaying = form;
+		form.evsmsReplay = true;
+		try {
+			form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+		} catch (e) {} // stara przeglądarka bez konstruktora Event – zostaje dataLayer
+		form.evsmsReplay = false;
+		setTimeout(function () {
+			if (replaying === form) {
+				replaying = null;
+			}
+		}, 3000);
+	}
+
 	var SOURCE_KEY = 'evsmsSource';
 
 	// gclid i UTM znikają z adresu po pierwszej podstronie – zapamiętujemy je na czas sesji
@@ -248,6 +306,7 @@
 			layerEvent.currency = cfg.currency || 'PLN';
 		}
 		window.dataLayer.push(layerEvent);
+		emitSubmit(form);
 
 		// Układ z samym GTM (bez gtag): zdarzenie w dataLayer jest zgłoszeniem, które obsłuży kontener
 		var reported = !!window.google_tag_manager;
@@ -379,13 +438,8 @@
 		setFieldError(form, 'phone', validate(form).phone || '');
 	});
 
-	document.addEventListener('submit', function (e) {
-		var form = e.target.closest('.evsms-form');
-		if (!form) {
-			return;
-		}
-		e.preventDefault();
-
+	// Wywoływane z blokady (tryb zgodności) albo z nasłuchu submit poniżej
+	function handleSubmit(form) {
 		if (form.classList.contains('is-loading')) {
 			return;
 		}
@@ -453,5 +507,17 @@
 			.finally(function () {
 				setLoading(form, false);
 			});
+	}
+
+	window.evsmsSubmit = handleSubmit;
+
+	document.addEventListener('submit', function (e) {
+		var form = e.target.closest('.evsms-form');
+		// Emitowany submit po sukcesie jest tylko dla analityki – nie blokujemy go i nie wysyłamy ponownie
+		if (!form || form.evsmsReplay) {
+			return;
+		}
+		e.preventDefault();
+		handleSubmit(form);
 	});
 })();

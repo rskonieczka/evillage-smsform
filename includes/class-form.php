@@ -19,6 +19,7 @@ class EVSMS_Form {
 		add_shortcode( 'evillage_smsform', array( __CLASS__, 'render_shortcode' ) );
 		add_action( 'init', array( __CLASS__, 'register_assets' ) );
 		add_action( 'init', array( __CLASS__, 'register_block' ) );
+		add_action( 'wp_head', array( __CLASS__, 'print_tracking_guard' ), PHP_INT_MIN );
 
 		add_action( 'wp_ajax_evsms_nonce', array( __CLASS__, 'ajax_nonce' ) );
 		add_action( 'wp_ajax_nopriv_evsms_nonce', array( __CLASS__, 'ajax_nonce' ) );
@@ -72,6 +73,23 @@ class EVSMS_Form {
 			'currency' => (string) EVSMS_Settings::get( 'conv_currency' ),
 			'ga4Event' => (string) EVSMS_Settings::get( 'conv_ga4_event' ),
 			'enhanced' => (bool) EVSMS_Settings::get( 'conv_enhanced' ),
+			'compat' => (bool) EVSMS_Settings::get( 'conv_compat' ),
+		);
+	}
+
+	/**
+	 * Blokada kliku „Odbierz” dla wyzwalaczy „Przesłanie formularza” (GTM, GA4, piksele).
+	 * Submit zatrzymany na window w fazie capture; smsform.js emituje go ponownie po wysłaniu SMS-a.
+	 * Kopia tej logiki jest w smsform.js jako fallback – zmieniać obie.
+	 */
+	public static function print_tracking_guard() {
+		if ( ! EVSMS_Settings::get( 'conv_compat' ) ) {
+			return;
+		}
+		wp_print_inline_script_tag(
+			'(function(){if(window.evsmsGuard){return;}window.evsmsGuard=1;window.addEventListener("submit",function(e){var f=e.target;if(!f||!f.matches||!f.matches("form.evsms-form")||f.evsmsReplay){return;}e.preventDefault();e.stopImmediatePropagation();if(typeof window.evsmsSubmit==="function"){window.evsmsSubmit(f);}},true);})();',
+			// Bez opóźniania/łączenia przez wtyczki optymalizacji – blokada musi działać przed GTM
+			array( 'id' => 'evsms-tracking-guard', 'data-no-optimize' => '1', 'data-no-defer' => '1', 'data-cfasync' => 'false' )
 		);
 	}
 
