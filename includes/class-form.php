@@ -13,6 +13,13 @@ class EVSMS_Form {
 	const NONCE_ACTION = 'evsms_request';
 
 	/**
+	 * Czasy etapów żądania w sekundach (nagłówek Server-Timing).
+	 *
+	 * @var array<string, float>
+	 */
+	private static $timing = array();
+
+	/**
 	 * Inicjalizacja.
 	 */
 	public static function init() {
@@ -53,6 +60,7 @@ class EVSMS_Form {
 				'copied' => EVSMS_Settings::msg( 'gift_copied' ),
 			),
 			'messages' => array(
+				'waitSlow' => EVSMS_Settings::msg( 'form_wait_slow' ),
 				'phoneEmpty' => EVSMS_Settings::msg( 'err_phone_empty' ),
 				'phoneLength' => EVSMS_Settings::msg( 'err_phone_length' ),
 				'phoneBlocked' => EVSMS_Settings::msg( 'err_phone_blocked' ),
@@ -286,6 +294,11 @@ class EVSMS_Form {
 	 * Obsługa wysłania formularza.
 	 */
 	public static function ajax_request() {
+		// Zamknięcie karty nie może przerwać pracy między wysłaniem SMS-a a zapisem w bazie
+		ignore_user_abort( true );
+		self::$timing['boot'] = microtime( true ) - (float) ( $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime( true ) );
+		$started = microtime( true );
+
 		if ( ! check_ajax_referer( self::NONCE_ACTION, 'nonce', false ) ) {
 			self::fail( EVSMS_Settings::msg( 'err_session' ), 403 );
 		}
@@ -313,9 +326,66 @@ class EVSMS_Form {
 		}
 
 		if ( $result['success'] ) {
-			wp_send_json_success( $result['data'] );
+			self::send_success( $result['data'], $result['after'] ?? null, $started );
 		}
+		self::timing_header( $started );
 		wp_send_json_error( $result['data'], $result['status'] );
+	}
+
+	/**
+	 * Odpowiedź sukcesu. $after (e-mail, akcja evsms_voucher_sent) wykonuje się po zamknięciu połączenia,
+	 * gdy serwer to umożliwia (LiteSpeed, PHP-FPM) – klient nie czeka na wysyłkę e-maila.
+	 * Na innych serwerach $after zostaje przed odpowiedzią, jak dotąd.
+	 */
+	private static function send_success( $data, $after, $started ) {
+		$finish = '';
+		if ( function_exists( 'litespeed_finish_request' ) ) {
+			$finish = 'litespeed_finish_request';
+		} elseif ( function_exists( 'fastcgi_finish_request' ) ) {
+			$finish = 'fastcgi_finish_request';
+		}
+
+		if ( ! $after || '' === $finish ) {
+			if ( $after ) {
+				$after_start = microtime( true );
+				$after();
+				self::$timing['mail'] = microtime( true ) - $after_start;
+			}
+			self::timing_header( $started );
+			wp_send_json_success( $data );
+		}
+
+		// Ta sama treść co wp_send_json_success(), ale bez wp_die(), żeby po odpowiedzi dokończyć pracę
+		self::timing_header( $started );
+		if ( ! headers_sent() ) {
+			header( 'Content-Type: application/json; charset=' . get_option( 'blog_charset' ) );
+		}
+		echo wp_json_encode( array( 'success' => true, 'data' => $data ) );
+		while ( ob_get_level() > 0 ) {
+			ob_end_flush();
+		}
+		$finish();
+
+		$after();
+		exit;
+	}
+
+	/**
+	 * Czas etapów w nagłówku Server-Timing (DevTools → Sieć → Czas): start WordPressa, SMSAPI,
+	 * e-mail (tylko gdy wysyłany przed odpowiedzią) i cała obsługa żądania.
+	 */
+	private static function timing_header( $started ) {
+		if ( headers_sent() ) {
+			return;
+		}
+		$parts = array();
+		foreach ( array( 'boot' => 'WordPress', 'sms' => 'SMSAPI', 'mail' => 'Email i integracje' ) as $key => $desc ) {
+			if ( isset( self::$timing[ $key ] ) ) {
+				$parts[] = sprintf( '%s;desc="%s";dur=%.1f', $key, $desc, self::$timing[ $key ] * 1000 );
+			}
+		}
+		$parts[] = sprintf( 'app;desc="Formularz";dur=%.1f', ( microtime( true ) - $started ) * 1000 );
+		header( 'Server-Timing: ' . implode( ', ', $parts ) );
 	}
 
 	/**
@@ -413,7 +483,7 @@ class EVSMS_Form {
 			);
 		}
 
-		return array( 'success' => true, 'data' => $data );
+		return array( 'success' => true, 'data' => $data, 'after' => $result['after'] ?? null );
 	}
 
 	/**
@@ -496,26 +566,32 @@ class EVSMS_Form {
 		$number = EVSMS_Vouchers::format_number( $id );
 		$message = EVSMS_Settings::msg( 'message', self::placeholders( $number, $code ) );
 
+		$sms_start = microtime( true );
 		$sms = EVSMS_Smsapi::send( $phone, $message, self::sms_idx( $id ) );
+		self::$timing['sms'] = microtime( true ) - $sms_start;
 		if ( ! $sms['success'] ) {
 			EVSMS_Vouchers::mark_failed( $id, $sms['error'] );
 			return array( 'success' => false, 'message' => EVSMS_Settings::msg( 'err_sms_failed' ), 'field' => 'phone', 'refund' => true );
 		}
 
 		EVSMS_Vouchers::mark_sent( $id, $sms['sms_id'] );
-		self::send_notification( $number, $phone, $code );
 
-		/**
-		 * Kupon wysłany SMS-em.
-		 *
-		 * @param int    $id     Autonumer vouchera.
-		 * @param string $number Sformatowany numer vouchera.
-		 * @param string $phone  Numer telefonu (48XXXXXXXXX).
-		 * @param string $code   Kod kuponu.
-		 */
-		do_action( 'evsms_voucher_sent', $id, $number, $phone, $code );
+		// E-mail i integracje po odpowiedzi dla klienta (send_success) – nie wydłużają oczekiwania na ekranie
+		$after = function () use ( $id, $number, $phone, $code ) {
+			self::send_notification( $number, $phone, $code );
 
-		return array( 'success' => true, 'voucher_id' => $id, 'voucher' => $number );
+			/**
+			 * Kupon wysłany SMS-em.
+			 *
+			 * @param int    $id     Autonumer vouchera.
+			 * @param string $number Sformatowany numer vouchera.
+			 * @param string $phone  Numer telefonu (48XXXXXXXXX).
+			 * @param string $code   Kod kuponu.
+			 */
+			do_action( 'evsms_voucher_sent', $id, $number, $phone, $code );
+		};
+
+		return array( 'success' => true, 'voucher_id' => $id, 'voucher' => $number, 'after' => $after );
 	}
 
 	/**

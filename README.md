@@ -4,7 +4,7 @@ Wtyczka WordPress z formularzem, w którym klient podaje numer telefonu i dostaj
 
 | | |
 |---|---|
-| Wersja | 1.7.0 |
+| Wersja | 1.7.1 |
 | Wymagany WordPress | 6.0+ |
 | Wymagane PHP | 8.0+ |
 | Bramka SMS | SMSAPI.pl (konto i token OAuth) |
@@ -189,12 +189,12 @@ Numery komórkowe (45, 50, 51, 53, 57, 60, 66, 69, 72, 73, 78, 79, 88) nie nale�
 
 ## Jak to działa po stronie serwera
 
-1. Formularz pobiera **świeży nonce przez AJAX** (`evsms_nonce`), więc działa także na stronach z pamięci podręcznej (LiteSpeed Cache, WP Rocket itp.).
+1. Formularz pobiera **świeży nonce przez AJAX** (`evsms_nonce`), więc działa także na stronach z pamięci podręcznej (LiteSpeed Cache, WP Rocket itp.). Nonce jest pobierany zawczasu, gdy w polu jest już 9 cyfr (ważny w przeglądarce 30 minut), więc kliknięcie „Odbierz” wysyła od razu jedno żądanie. Wcześniej nie, bo `evsms_nonce` wydaje ciasteczko urządzenia i zużywa limit nowych urządzeń z IP.
 2. Żądanie `evsms_request` przechodzi kontrole: nonce → honeypot → normalizacja numeru do `48XXXXXXXXX` → zabronione początki → zgoda → limit prób z IP.
 3. `GET_LOCK` na numer telefonu (brak podwójnej wysyłki), opcjonalnie sprawdzenie „jeden kupon na numer”.
 4. Zapis wiersza `pending` – **numer vouchera = AUTO_INCREMENT** tabeli, formatowany jako prefiks + 6 cyfr.
 5. `POST https://api.smsapi.pl/sms.do` (`format=json`, `encoding=utf-8`, `skip_foreign=1`, opcjonalnie `normalize=1`, `from`, `test=1`, `idx` + `check_idx=1`). Przy błędzie transportu lub odpowiedzi 5xx – ponowienie na `https://api2.smsapi.pl/sms.do`; dzięki `idx` SMSAPI nie wyśle drugiej wiadomości, jeśli pierwsza już wyszła.
-6. Sukces → status `sent`, e-mail do administratora, akcja `evsms_voucher_sent`.
+6. Sukces → status `sent` i odpowiedź dla klienta. E-mail do administratora i akcja `evsms_voucher_sent` wykonują się **po zamknięciu połączenia** (`litespeed_finish_request()` na LiteSpeed, `fastcgi_finish_request()` na PHP-FPM), więc klient nie czeka na wysyłkę e-maila. Na innych serwerach zostają przed odpowiedzią. Żądanie ma `ignore_user_abort(true)` – zamknięcie karty nie przerwie zapisu po wysłaniu SMS-a.
    Błąd → status `failed` z opisem błędu (numer zostaje w rejestrze, więc luka w numeracji jest audytowalna), klient widzi komunikat „SMS nie został wysłany”.
 
 ## Bezpieczeństwo i ochrona przed nadużyciami
@@ -249,7 +249,7 @@ Opcja „Rozszerzone konwersje” przekazuje numer telefonu do Google (haszowany
 
 ### Akcja `evsms_voucher_sent`
 
-Wywoływana po udanym wysłaniu SMS-a i e-maila. Dobre miejsce na integrację, np. utworzenie kuponu WooCommerce, zapis do CRM czy wysłanie zdarzenia do analityki.
+Wywoływana po udanym wysłaniu SMS-a i e-maila. Od wersji 1.7.1 – po wysłaniu odpowiedzi do przeglądarki (gdy serwer na to pozwala), więc wynik akcji nie trafia już do odpowiedzi AJAX. Dobre miejsce na integrację, np. utworzenie kuponu WooCommerce, zapis do CRM czy wysłanie zdarzenia do analityki.
 
 ```php
 /**
@@ -367,6 +367,9 @@ Szczegółowy błąd SMSAPI jest zapisany przy voucherze w zakładce **Vouchery*
 **„Sesja formularza wygasła”.**
 Strona jest z cache, a żądanie `admin-ajax.php?action=evsms_nonce` jest blokowane lub cache'owane. Wyklucz `admin-ajax.php` z cache i z reguł firewalla.
 
+**Wysyłka trwa długo.**
+W DevTools → Sieć kliknij żądanie `admin-ajax.php` (akcja `evsms_request`) → zakładka Czas (Timing). Nagłówek `Server-Timing` pokazuje: `boot` (start WordPressa), `sms` (odpowiedź SMSAPI), `mail` (e-mail i integracje – tylko gdy wysyłane przed odpowiedzią) i `app` (cała obsługa). Po 3 sekundach klient widzi komunikat „Dłuższe oczekiwanie” (zmienisz go w Komunikatach).
+
 **Wszyscy dostają „Zbyt wiele prób”.**
 Serwer widzi adres proxy zamiast adresu klienta – zob. uwagę w sekcji [Bezpieczeństwo](#bezpieczeństwo-i-ochrona-przed-nadużyciami) albo zwiększ / wyłącz limit (0).
 
@@ -401,6 +404,13 @@ evillage-smsform/
 ```
 
 ## Historia zmian
+
+### 1.7.1
+
+- Krótsze oczekiwanie po kliknięciu „Odbierz”: nonce pobierany zawczasu po wpisaniu 9 cyfr, a e-mail do administratora i akcja `evsms_voucher_sent` wykonywane po wysłaniu odpowiedzi (LiteSpeed / PHP-FPM).
+- `ignore_user_abort(true)`: zamknięcie karty nie przerywa zapisu po wysłaniu SMS-a.
+- Komunikat przy wysyłce dłuższej niż 3 s („Dłuższe oczekiwanie”, edytowalny w Komunikatach).
+- Nagłówek `Server-Timing` z czasem etapów żądania (WordPress, SMSAPI, e-mail, całość).
 
 ### 1.7.0
 

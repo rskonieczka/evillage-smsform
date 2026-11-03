@@ -21,6 +21,33 @@
 		});
 	}
 
+	/* Nonce zawczasu: pobierany, gdy numer ma już 9 cyfr (wysyłka jest wtedy prawie pewna), więc kliknięcie
+	   „Odbierz” od razu wysyła zgłoszenie. Nie wcześniej – pobranie wydaje ciasteczko urządzenia
+	   i zużywa limit nowych urządzeń z jednego IP. */
+	var NONCE_TTL = 30 * 60 * 1000;
+	var nonceCache = null;
+	var noncePending = null;
+
+	function fetchNonce() {
+		if (nonceCache && Date.now() - nonceCache.at < NONCE_TTL) {
+			return Promise.resolve({ success: true, data: { nonce: nonceCache.nonce } });
+		}
+		// Kliknięcie w trakcie pobierania zawczasu czeka na to samo żądanie zamiast wysyłać drugie
+		if (!noncePending) {
+			noncePending = post(new URLSearchParams({ action: 'evsms_nonce' }))
+				.then(function (res) {
+					if (res && res.success) {
+						nonceCache = { nonce: res.data.nonce, at: Date.now() };
+					}
+					return res;
+				})
+				.finally(function () {
+					noncePending = null;
+				});
+		}
+		return noncePending;
+	}
+
 	/**
 	 * Same cyfry numeru krajowego (max 9); obcina wklejone +48 / 0048.
 	 */
@@ -420,8 +447,12 @@
 		if (e.target.classList.contains('evsms-phone')) {
 			formatPhone(e.target);
 			// Zabroniony początek sygnalizujemy od razu, a nie dopiero przy wysyłce
-			var prefix = blockedPrefix(nationalDigits(e.target.value));
+			var digits = nationalDigits(e.target.value);
+			var prefix = blockedPrefix(digits);
 			setFieldError(form, 'phone', prefix ? blockedMessage(prefix) : '');
+			if (digits.length === 9 && !prefix) {
+				fetchNonce().catch(function () {});
+			}
 		}
 		if (e.target.name === 'consent') {
 			setFieldError(form, 'consent', '');
@@ -457,9 +488,14 @@
 
 		setLoading(form, true);
 
+		// Dłuższa wysyłka (zwykle czekanie na SMSAPI): mówimy, że trwa, żeby nikt nie zamykał strony
+		var slowTimer = setTimeout(function () {
+			setMessage(form, msg.waitSlow);
+		}, 3000);
+
 		// Najpierw świeży nonce (strona może pochodzić z cache), potem właściwe żądanie
 		// (przy okazji serwer wydaje ciasteczko urządzenia – bez niego wysyłka nie zostanie przyjęta)
-		post(new URLSearchParams({ action: 'evsms_nonce' }))
+		fetchNonce()
 			.then(function (res) {
 				if (!res || !res.success) {
 					return res; // np. zbyt wiele nowych urządzeń z tego IP
@@ -474,6 +510,11 @@
 			.then(function (res) {
 				var data = (res && res.data) || {};
 				var wrap = form.closest('.evsms');
+
+				clearTimeout(slowTimer);
+				if (form.querySelector('.evsms-msg').textContent === msg.waitSlow) {
+					setMessage(form, '');
+				}
 
 				if (res && res.success) {
 					showSuccess(form, data);
@@ -505,6 +546,7 @@
 				setMessage(form, msg.generic);
 			})
 			.finally(function () {
+				clearTimeout(slowTimer);
 				setLoading(form, false);
 			});
 	}

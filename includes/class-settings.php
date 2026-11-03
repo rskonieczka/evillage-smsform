@@ -37,6 +37,7 @@ class EVSMS_Settings {
 			'form_label' => array( 'Formularz', 'Etykieta pola telefonu', 'Numer telefonu komórkowego', '' ),
 			'form_button' => array( 'Formularz', 'Treść przycisku', 'Wyślij kupon', '' ),
 			'form_button_busy' => array( 'Formularz', 'Przycisk podczas wysyłania', 'Wysyłanie…', '' ),
+			'form_wait_slow' => array( 'Formularz', 'Dłuższe oczekiwanie', 'Wysyłamy SMS. To może potrwać kilka sekund, nie zamykaj strony.', 'Pokazywany pod przyciskiem, gdy wysyłka trwa dłużej niż 3 sekundy.' ),
 			'success_message' => array( 'Po wysłaniu', 'Nagłówek', 'Gotowe! Kupon został wysłany SMS-em.', '' ),
 			'success_meta' => array( 'Po wysłaniu', 'Opis', 'Wysłaliśmy SMS na numer {phone}. Zwykle dociera w ciągu minuty.', '{phone} – zamaskowany numer, np. +48 600 *** 200' ),
 			'success_meta_repeat' => array( 'Po wysłaniu', 'Opis przy ponownym numerze', 'Jeśli numer {phone} nie otrzymał jeszcze kuponu, wysłaliśmy SMS. Jeśli wcześniej go odebrałeś, sprawdź wcześniejsze wiadomości.', 'Pokazywany zamiast opisu, gdy numer już brał udział w promocji, a ukrywanie duplikatów jest włączone. {phone} – zamaskowany numer.' ),
